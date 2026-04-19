@@ -2,7 +2,7 @@
 
 Repositório para o jogo 4 em linha.
 
-Grupo 3
+# Grupo 3
 + Afonso Sousa
 + Luís Cunha
 + Paulo Cabrita
