@@ -56,6 +56,8 @@ def train_alphazero_self_play(
         checkpoint_path = Path(checkpoint_dir)
         checkpoint_path.mkdir(parents=True, exist_ok=True)
 
+    eval_simulations = config.eval_mcts_simulations or config.mcts_simulations
+
     for episode in range(1, config.episodes + 1):
         examples, final_reward, episode_steps = generate_self_play_episode(network, config, rng)
         replay_buffer.extend(examples)
@@ -84,7 +86,7 @@ def train_alphazero_self_play(
         if episode % config.eval_interval == 0 or episode == config.episodes:
             eval_agent = AlphaZeroAgent(
                 network,
-                simulations=config.mcts_simulations,
+                simulations=eval_simulations,
                 c_puct=config.c_puct,
                 device=config.device,
                 seed=config.seed,
@@ -106,7 +108,7 @@ def train_alphazero_self_play(
                     eval_agent,
                     lambda game_idx: AlphaZeroAgent(
                         _load_previous_alphazero_network(previous_eval_state_dict, config.hidden_dim),
-                        simulations=config.mcts_simulations,
+                        simulations=eval_simulations,
                         c_puct=config.c_puct,
                         device=config.device,
                         seed=config.seed + 30_000 + game_idx,
@@ -138,7 +140,7 @@ def train_alphazero_self_play(
     network.load_state_dict(best_state_dict)
     final_agent = AlphaZeroAgent(
         network,
-        simulations=config.mcts_simulations,
+        simulations=eval_simulations,
         c_puct=config.c_puct,
         device=config.device,
         seed=config.seed,

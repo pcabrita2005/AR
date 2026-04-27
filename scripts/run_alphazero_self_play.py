@@ -19,6 +19,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--eval-interval", type=int, default=25)
     parser.add_argument("--eval-games", type=int, default=24)
     parser.add_argument("--mcts-simulations", type=int, default=120)
+    parser.add_argument("--eval-mcts-simulations", type=int, default=200)
     parser.add_argument("--checkpoint-dir", type=str, default="outputs/alphazero_checkpoints")
     parser.add_argument("--device", type=str, default="cpu")
     return parser.parse_args()
@@ -31,6 +32,7 @@ def main() -> None:
         eval_interval=args.eval_interval,
         eval_games=args.eval_games,
         mcts_simulations=args.mcts_simulations,
+        eval_mcts_simulations=args.eval_mcts_simulations,
         device=args.device,
     )
     _agent, metrics = train_alphazero_self_play(config, checkpoint_dir=args.checkpoint_dir)

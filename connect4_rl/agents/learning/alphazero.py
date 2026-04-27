@@ -26,6 +26,7 @@ class AlphaZeroConfig:
     updates_per_episode: int = 2
     hidden_dim: int = 256
     mcts_simulations: int = 120
+    eval_mcts_simulations: int | None = 200
     c_puct: float = 1.5
     dirichlet_alpha: float = 0.3
     dirichlet_epsilon: float = 0.25
