@@ -1,13 +1,19 @@
 # Local tooling
 .agents/
 .codex
+.venv/
 
 # Do not submit the reference/example project
 Exemplo Estrutura/
+docs/
 
 # Python
 __pycache__/
 *.py[cod]
+
+# Generated artifacts
+outputs/*
+!outputs/.gitkeep
 
 # Jupyter
 .ipynb_checkpoints/
