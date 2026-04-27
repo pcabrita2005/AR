@@ -1,0 +1,13 @@
+# Local tooling
+.agents/
+.codex
+
+# Do not submit the reference/example project
+Exemplo Estrutura/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Jupyter
+.ipynb_checkpoints/
