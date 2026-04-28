@@ -124,12 +124,24 @@ Se viável, versão simplificada combinando rede política/valor com MCTS. MCTS 
   )
 ]
 
- = Validação das Soluções
+= Validação das Soluções
 
-A avaliação integra três níveis: *(i)* verificação funcional e testes de regras; *(ii)* desempenho em torneios contra baselines (aleatório e heurístico); *(iii)* análise qualitativa de partidas.
+A avaliação será conduzida a vários níveis, de forma a verificar tanto a correção da implementação como a qualidade efetiva do agente.
 
-*Medições principais*: rolling win rate, Elo entre checkpoints e curvas de treino (loss, recompensa, entropia).
+== *Baselines de referência*
+- Aleatório: seleciona uniformemente entre colunas válidas (objetivo: >= 95% vitória em 200+ jogos).
+- Heurístico: bloqueia ameaças e completa alinhamentos próprios.
 
-Os ensaios utilizam múltiplas sementes aleatórias, registo de pontos de verificação e comparação por torneio todos‑contra‑todos (200 partidas por par, papéis alternados).
+== Métricas de Treino
 
-Os resultados serão sumarizados em tabelas e gráficos, com discussão sobre estabilidade, robustez e implicações das diferenças entre algoritmos.
+- Taxa de vitória móvel (_rolling win rate_) contra a versão anterior do agente e contra os baselines, ao longo das iterações de treino.
+- _Elo rating_ calculado por torneio entre _checkpoints_ do agente em diferentes fases do treino, permitindo quantificar a evolução relativa.
+- Curvas de aprendizagem: _Loss_ da rede (_policy loss_, _value loss_), recompensa média por episódio e entropia da política.
+
+== Comparação entre algoritmos
+
+Torneio _round-robin_: DQN vs PPO vs AlphaZero (se implementado). Mínimo 200 partidas por par, com papéis alternados para eliminar viés posicional.
+
+== Análise qualitativa
+
+Exame de partidas representativas: controlo do centro, construção de ameaças duplas (_forks_) e bloqueio preventivo.
