@@ -2,7 +2,7 @@
 
 #import "@preview/fine-lncs:0.4.0": lncs, institute, author, theorem, proof
 
-#let inst_minho = institute("Universidade do Minho")
+#let inst_minho = institute("Universidade do Minho\nAprendizagem por Reforço\nGrupo 3\n\n29 de Abril de 2026")
 
 #show: lncs.with(
   title: "Self-Play Connect Four",
@@ -36,7 +36,7 @@ O Connect Four é um jogo de dois jogadores com informação perfeita, jogado nu
 
 = Metodologia e Cronograma
 
-O trabalho será executado por etapas, com objetivos incrementais e critérios de conclusão (_done_) explícitos. A estratégia do grupo é concluir primeiro os dois algoritmos principais (DQN e PPO), de modo a garantir uma solução base sólida, e apenas depois avançar para o AlphaZero simplificado caso exista folga temporal.
+O trabalho será executado por etapas, com objetivos incrementais e critérios de conclusão explícitos. A estratégia do grupo será a conclusão, em primeiro lugar, dos dois algoritmos principais, DQN e PPO, garantindo uma solução base sólida. Apenas depois avançar-se-á para o AlphaZero simplificado.
 
 == Cronograma proposto
 
@@ -48,10 +48,10 @@ O trabalho será executado por etapas, com objetivos incrementais e critérios d
     table.hline(),
     [*Etapa*], [*Período*], [*Resultado esperado*],
     table.hline(),
-    [Planeamento], [até 30/04/2026], [Documento de planeamento submetido no GitHub do grupo.],
+    [Planeamento], [até 30/04/2026], [Documento de planeamento submetido em GitHub],
     [DQN], [01/05/2026 a 15/05/2026], [Pipeline de treino e avaliação do DQN funcional.],
-    [PPO], [16/05/2026 a 31/05/2026], [Pipeline de treino e avaliação do PPO funcional.],
-    [AlphaZero (opcional)], [até 31/05/2026], [Protótipo funcional com MCTS + rede política/valor, caso exista folga temporal.],
+    [PPO], [01/05/2026 a 15/05/2026], [Pipeline de treino e avaliação do PPO funcional.],
+    [AlphaZero], [18/05/2026 a 29/05/2026], [Protótipo funcional com MCTS + rede política/valor.],
     [Apresentação do trabalho], [02/06/2026], [Apresentação final, abordagem e resultados obtidos até à data. Recolha de feedback para o relatório final.],
     [Relatório final], [03/06/2026 a 15/06/2026], [Relatório consolidado com metodologia, resultados e discussão.],
     [Entrega final], [até 16/06/2026], [Submissão final do relatório e do código desenvolvido.],
@@ -59,12 +59,12 @@ O trabalho será executado por etapas, com objetivos incrementais e critérios d
   )
 ]
 
-== Critérios de conclusão (_done_)
+== Critérios de conclusão
 
-- DQN e PPO: agentes treináveis com avaliação contra baselines.
-- AlphaZero (opcional): versão simplificada funcional.
-- Relatório: metodologia, configuração experimental, resultados e conclusões.
-- Código: repositório organizado e executável.
+- DQN e PPO: Agentes treinados com avaliação contra baselines.
+- AlphaZero: Versão simplificada funcional.
+- Relatório: Metodologia, configuração experimental, resultados e conclusões.
+- Código: Repositório organizado e executável.
 
 = Ambiente e Dados
 
@@ -90,7 +90,7 @@ Será utilizada a implementação _Connect Four_ do PettingZoo (`connect_four_v3
 
 = Algoritmos a implementar
 
-Serão implementados e comparados dois algoritmos principais. Um terceiro algoritmo poderá ser implementado, caso seja viável até à data da entrega do trabalho.
+Serão implementados e comparados os dois algoritmos principais. Posteriormente, serão comparados com o terceiro algoritmo implementado. Caso seja viável, até à data da entrega do trabalho, outros _game plays_ poderão ser explorados e se for o caso, os seus resultados analisados e descritos no relatório final.
 
 == Deep Q-Network com Self-Play (DQN)
 
@@ -98,11 +98,11 @@ O DQN é o algoritmo base. Aprende Q-valores via rede convolucional com _experie
 
 == Proximal Policy Optimization (PPO)
 
-Algoritmo de gradiente de política com _clipping_ para estabilidade. O agente assume ambos os papéis em cada episódio com recompensa invertida. Maior estabilidade que DQN em ambientes estocásticos.
+Algoritmo de gradiente de política com _clipping_ para estabilidade. O agente assume ambos os papéis em cada episódio com recompensa invertida. À partida, é mais estável que o DQN em ambientes estocásticos.
 
-== AlphaZero Simplificado (opcional)
+== AlphaZero Simplificado
 
-Se viável, versão simplificada combinando rede política/valor com MCTS. MCTS guia exploração durante treino e inferência. Objetivo secundário.
+Versão simplificada combinando rede política/valor com MCTS. O MCTS conduzirá a exploração durante treino e inferência.
 
 = Ferramentas e Packages de Software
 
@@ -126,10 +126,10 @@ Se viável, versão simplificada combinando rede política/valor com MCTS. MCTS 
 
  = Validação das Soluções
 
-A avaliação integra três níveis: *(i)* verificação funcional e testes de regras; *(ii)* desempenho em torneios contra baselines (aleatório e heurístico); *(iii)* análise qualitativa de partidas.
+A avaliação integrará três níveis: (i) verificação funcional e testes das regras; (ii) desempenho em torneios contra baselines (aleatório e heurístico); (iii) análise qualitativa de partidas.
 
-*Medições principais*: rolling win rate, Elo entre checkpoints e curvas de treino (loss, recompensa, entropia).
+Medições principais: _rolling win rate_, sistema de rating Elo entre checkpoints e curvas de treino (loss, recompensa, entropia) para medir e comparar a força dos modelos ao longo do treino.
 
-Os ensaios utilizam múltiplas sementes aleatórias, registo de pontos de verificação e comparação por torneio todos‑contra‑todos (200 partidas por par, papéis alternados).
+Os ensaios utilizaram múltiplas sementes aleatórias, registando os pontos de verificação e comparação por torneio todos‑contra‑todos (200 partidas por par, com papéis alternados).
 
-Os resultados serão sumarizados em tabelas e gráficos, com discussão sobre estabilidade, robustez e implicações das diferenças entre algoritmos.
+Os resultados serão sumarizados em tabelas e gráficos, com possível discussão sobre estabilidade, robustez e diferenças entre algoritmos.
