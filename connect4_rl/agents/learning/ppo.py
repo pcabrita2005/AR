@@ -9,37 +9,10 @@ from typing import Sequence
 import torch
 from torch import nn
 
+from connect4_rl.config import PPOConfig
 from connect4_rl.envs.connect_four import ConnectFourState, encode_state
 
 
-@dataclass
-class PPOConfig:
-    episodes: int = 500
-    gamma: float = 0.99
-    gae_lambda: float = 0.95
-    learning_rate: float = 2.5e-4
-    clip_epsilon: float = 0.2
-    value_loss_coef: float = 0.5
-    entropy_coef: float = 0.02
-    update_epochs: int = 6
-    minibatch_size: int = 32
-    hidden_dim: int = 256
-    rollout_episodes_per_update: int = 8
-    opponent_refresh_interval: int = 20
-    opponent_pool_size: int = 5
-    warmup_episodes: int = 40
-    random_opponent_fraction: float = 0.20
-    heuristic_opponent_fraction: float = 0.15
-    eval_interval: int = 50
-    eval_games: int = 24
-    seed: int = 0
-    device: str = "cpu"
-    checkpoint_score_heuristic_weight: float = 2.0
-    use_horizontal_symmetry_augmentation: bool = True
-    max_grad_norm: float = 1.0
-    anneal_learning_rate: bool = True
-    use_reward_shaping: bool = True
-    reward_shaping_scale: float = 0.05
 
 
 class ConnectFourActorCritic(nn.Module):

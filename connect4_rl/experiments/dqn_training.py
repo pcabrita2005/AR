@@ -11,10 +11,9 @@ from torch import nn
 
 from connect4_rl.agents.baselines import HeuristicAgent, RandomAgent
 from connect4_rl.agents.learning.dqn import (
+    ConnectFourQNetwork,
     DQNAgent,
-    DQNConfig,
     ReplayBuffer,
-    build_network_from_state_dict,
     clone_state_dict,
     epsilon_by_step,
     flip_action_horizontally,
@@ -23,6 +22,8 @@ from connect4_rl.agents.learning.dqn import (
     legal_actions_to_mask,
     state_to_numpy,
 )
+from connect4_rl.config import Config, DQNConfig
+from connect4_rl.utils.seed_utils import set_all_seeds
 from connect4_rl.envs.connect_four import (
     ConnectFourState,
     apply_action,
@@ -48,27 +49,27 @@ class DQNTrainingMetrics:
 
 
 def train_dqn_self_play(
-    config: DQNConfig | None = None,
+    config: Config | None = None,
     *,
     checkpoint_dir: str | Path | None = None,
 ) -> tuple[DQNAgent, DQNTrainingMetrics]:
-    config = config or DQNConfig()
-    rng = random.Random(config.seed)
-    np.random.seed(config.seed)
-    torch.manual_seed(config.seed)
+    from connect4_rl.config import get_default_config
+    config = config or get_default_config()
+    set_all_seeds(config.global_.seed)
+    rng = random.Random(config.global_.seed)
 
-    device = torch.device(config.device)
-    online_net = build_network(config).to(device)
-    target_net = build_network(config).to(device)
+    device = torch.device(config.resolve_device())
+    online_net = ConnectFourQNetwork(hidden_dim=config.dqn.hidden_dim).to(device)
+    target_net = ConnectFourQNetwork(hidden_dim=config.dqn.hidden_dim).to(device)
     target_net.load_state_dict(online_net.state_dict())
 
-    optimizer = torch.optim.AdamW(online_net.parameters(), lr=config.learning_rate)
-    replay = ReplayBuffer(config.replay_capacity)
+    optimizer = torch.optim.AdamW(online_net.parameters(), lr=config.dqn.learning_rate)
+    replay = ReplayBuffer(config.dqn.replay_buffer_size)
 
     opponent_pool = [clone_state_dict(online_net)]
     update_steps = 0
     policy_steps = 0
-    metrics = DQNTrainingMetrics(config=asdict(config))
+    metrics = DQNTrainingMetrics(config=asdict(config.dqn))
     best_state_dict = clone_state_dict(online_net)
     previous_eval_state_dict: dict[str, torch.Tensor] | None = None
 
@@ -77,7 +78,7 @@ def train_dqn_self_play(
         checkpoint_path = Path(checkpoint_dir)
         checkpoint_path.mkdir(parents=True, exist_ok=True)
 
-    for episode in range(1, config.episodes + 1):
+    for episode in range(1, config.dqn.episodes + 1):
         opponent_kind, opponent_agent = build_training_opponent(
             config=config,
             episode=episode,
@@ -92,12 +93,12 @@ def train_dqn_self_play(
 
         while not is_terminal(state):
             if state.current_player == online_player:
-                epsilon = epsilon_by_step(config, policy_steps)
+                epsilon = epsilon_by_step(config.dqn, policy_steps)
                 online_agent = DQNAgent(
                     online_net,
-                    device=config.device,
+                    device=config.resolve_device(),
                     epsilon=epsilon,
-                    seed=config.seed + policy_steps,
+                    seed=config.global_.seed + policy_steps,
                     name="online",
                 )
                 action = online_agent.select_action(state, legal_actions(state))
@@ -120,6 +121,7 @@ def train_dqn_self_play(
                     )
                     episode_reward = reward
                     state = state_after_online
+                    pending = None  # Ensure pending is cleared when episode terminates
                     loss = maybe_update_q_network(
                         online_net,
                         target_net,
@@ -132,8 +134,8 @@ def train_dqn_self_play(
                     if loss is not None:
                         metrics.losses.append(loss)
                         update_steps += 1
-                        soft_update_target_network(online_net, target_net, tau=config.target_ema_tau)
-                        if update_steps % config.target_sync_interval == 0:
+                        soft_update_target_network(online_net, target_net, tau=config.dqn.tau)
+                        if update_steps % config.dqn.target_update_freq == 0:
                             target_net.load_state_dict(online_net.state_dict())
                     break
 
@@ -169,7 +171,7 @@ def train_dqn_self_play(
                     episode_reward = reward if is_terminal(next_state) else episode_reward
                     pending = None
 
-                    for _ in range(config.gradient_updates_per_step):
+                    for _ in range(config.dqn.gradient_updates_per_step):
                         loss = maybe_update_q_network(
                             online_net,
                             target_net,
@@ -182,36 +184,36 @@ def train_dqn_self_play(
                         if loss is not None:
                             metrics.losses.append(loss)
                             update_steps += 1
-                            soft_update_target_network(online_net, target_net, tau=config.target_ema_tau)
-                            if update_steps % config.target_sync_interval == 0:
+                            soft_update_target_network(online_net, target_net, tau=config.dqn.tau)
+                            if update_steps % config.dqn.target_update_freq == 0:
                                 target_net.load_state_dict(online_net.state_dict())
 
                 state = next_state
 
         metrics.episode_rewards.append(episode_reward)
         metrics.episode_lengths.append(episode_steps)
-        metrics.epsilons.append(epsilon_by_step(config, policy_steps))
+        metrics.epsilons.append(epsilon_by_step(config.dqn, policy_steps))
         metrics.replay_sizes.append(len(replay))
         metrics.opponent_kinds.append(opponent_kind)
 
-        if episode % config.opponent_refresh_interval == 0:
+        if episode % config.dqn.opponent_refresh_interval == 0:
             opponent_pool.append(clone_state_dict(online_net))
-            opponent_pool = opponent_pool[-config.opponent_pool_size :]
+            opponent_pool = opponent_pool[-config.dqn.opponent_pool_size :]
 
-        if checkpoint_path is not None and (episode % config.eval_interval == 0 or episode == config.episodes):
+        if checkpoint_path is not None and (episode % config.dqn.eval_interval == 0 or episode == config.dqn.max_episodes):
             torch.save(online_net.state_dict(), checkpoint_path / f"dqn_episode_{episode:04d}.pt")
 
-        if episode % config.eval_interval == 0 or episode == config.episodes:
-            eval_agent = DQNAgent(online_net, device=config.device, epsilon=0.0, seed=config.seed)
+        if episode % config.dqn.eval_interval == 0 or episode == config.dqn.max_episodes:
+            eval_agent = DQNAgent(online_net, device=config.resolve_device(), epsilon=0.0, seed=config.global_.seed)
             random_wr = evaluate_against_agent(
                 eval_agent,
-                lambda game_idx: RandomAgent(seed=config.seed + 10_000 + game_idx),
-                games=config.eval_games,
+                lambda game_idx: RandomAgent(seed=config.global_.seed + 10_000 + game_idx),
+                games=config.dqn.eval_games,
             )
             heuristic_wr = evaluate_against_agent(
                 eval_agent,
-                lambda game_idx: HeuristicAgent(seed=config.seed + 20_000 + game_idx),
-                games=config.eval_games,
+                lambda game_idx: HeuristicAgent(seed=config.global_.seed + 20_000 + game_idx),
+                games=config.dqn.eval_games,
             )
             previous_wr = 0.0
             if previous_eval_state_dict is not None:
@@ -220,15 +222,15 @@ def train_dqn_self_play(
                     lambda game_idx: DQNAgent(
                         build_network_from_state_dict(
                             previous_eval_state_dict,
-                            device=config.device,
-                            hidden_dim=config.hidden_dim,
+                            device=config.resolve_device(),
+                            hidden_dim=config.dqn.fc_hidden,
                         ),
-                        device=config.device,
+                        device=config.resolve_device(),
                         epsilon=0.0,
-                        seed=config.seed + 30_000 + game_idx,
+                        seed=config.global_.seed + 30_000 + game_idx,
                         name="previous_snapshot",
                     ),
-                    games=config.eval_games,
+                    games=config.dqn.eval_games,
                 )
             metrics.evaluation.append(
                 {
@@ -238,7 +240,7 @@ def train_dqn_self_play(
                     "vs_previous_win_rate": previous_wr,
                 }
             )
-            score = heuristic_wr * config.checkpoint_score_heuristic_weight + random_wr
+            score = heuristic_wr * config.dqn.checkpoint_score_heuristic_weight + random_wr
             if score >= metrics.best_score:
                 metrics.best_score = score
                 best_state_dict = clone_state_dict(online_net)
@@ -251,16 +253,16 @@ def train_dqn_self_play(
             previous_eval_state_dict = clone_state_dict(online_net)
 
     online_net.load_state_dict(best_state_dict)
-    final_agent = DQNAgent(online_net, device=config.device, epsilon=0.0, seed=config.seed)
+    final_agent = DQNAgent(online_net, device=config.resolve_device(), epsilon=0.0, seed=config.global_.seed)
     if checkpoint_path is not None:
         write_metrics_snapshot(metrics, checkpoint_path / "metrics_final.json")
     return final_agent, metrics
 
 
-def build_network(config: DQNConfig) -> nn.Module:
+def build_network(config: Config) -> nn.Module:
     from connect4_rl.agents.learning.dqn import ConnectFourQNetwork
 
-    return ConnectFourQNetwork(hidden_dim=config.hidden_dim)
+    return ConnectFourQNetwork(hidden_dim=config.dqn.fc_hidden)
 
 
 def maybe_update_q_network(
@@ -269,13 +271,13 @@ def maybe_update_q_network(
     optimizer: torch.optim.Optimizer,
     replay: ReplayBuffer,
     rng: random.Random,
-    config: DQNConfig,
+    config: Config,
     device: torch.device,
 ) -> float | None:
-    if len(replay) < max(config.min_replay_size, config.batch_size):
+    if len(replay) < max(config.dqn.min_replay_size, config.dqn.batch_size):
         return None
 
-    states, actions, rewards, next_states, dones, next_masks = replay.sample(config.batch_size, rng)
+    states, actions, rewards, next_states, dones, next_masks = replay.sample(config.dqn.batch_size, rng)
     states_t = torch.tensor(states, dtype=torch.float32, device=device)
     actions_t = torch.tensor(actions, dtype=torch.int64, device=device).unsqueeze(1)
     rewards_t = torch.tensor(rewards, dtype=torch.float32, device=device)
@@ -294,7 +296,7 @@ def maybe_update_q_network(
         next_target_q_values = target_net(next_states_t)
         max_next_q_values = next_target_q_values.gather(1, next_actions).squeeze(1)
         max_next_q_values = torch.where(dones_t > 0.5, torch.zeros_like(max_next_q_values), max_next_q_values)
-        targets = rewards_t + config.gamma * max_next_q_values
+        targets = rewards_t + config.dqn.gamma * max_next_q_values
 
     loss = torch.nn.functional.smooth_l1_loss(q_values, targets)
     optimizer.zero_grad()
@@ -337,34 +339,37 @@ def play_dqn_match(dqn_agent: DQNAgent, opponent, *, controlled_player: int = 1)
 
 def build_training_opponent(
     *,
-    config: DQNConfig,
+    config: Config,
     episode: int,
     rng: random.Random,
     opponent_pool: list[dict[str, torch.Tensor]],
 ) -> tuple[str, object]:
-    if episode <= config.warmup_episodes:
+    warmup = config.dqn.warmup_episodes
+    if episode <= warmup:
         if episode % 2 == 0:
-            return "random", RandomAgent(seed=config.seed + episode)
-        return "heuristic", HeuristicAgent(seed=config.seed + episode)
+            return "random", RandomAgent(seed=config.global_.seed + episode)
+        return "heuristic", HeuristicAgent(seed=config.global_.seed + episode)
 
     draw = rng.random()
-    if draw < config.random_opponent_fraction:
-        return "random", RandomAgent(seed=config.seed + episode)
-    if draw < config.random_opponent_fraction + config.heuristic_opponent_fraction:
-        return "heuristic", HeuristicAgent(seed=config.seed + episode)
+    random_frac = config.dqn.random_opponent_fraction
+    heuristic_frac = config.dqn.heuristic_opponent_fraction
+    if draw < random_frac:
+        return "random", RandomAgent(seed=config.global_.seed + episode)
+    if draw < random_frac + heuristic_frac:
+        return "heuristic", HeuristicAgent(seed=config.global_.seed + episode)
 
     opponent_net = build_network_from_state_dict(
         rng.choice(opponent_pool),
-        device=config.device,
-        hidden_dim=config.hidden_dim,
+        device=config.resolve_device(),
+        hidden_dim=config.dqn.fc_hidden,
     )
     return (
         "snapshot",
         DQNAgent(
             opponent_net,
-            device=config.device,
-            epsilon=config.opponent_epsilon,
-            seed=config.seed + episode,
+            device=config.resolve_device(),
+            epsilon=config.dqn.opponent_epsilon,
+            seed=config.global_.seed + episode,
             name="snapshot",
         ),
     )
@@ -384,7 +389,7 @@ def soft_update_target_network(online_net: nn.Module, target_net: nn.Module, *, 
 
 def add_transition(
     replay: ReplayBuffer,
-    config: DQNConfig,
+    config: Config,
     state: np.ndarray,
     action: int,
     reward: float,
@@ -393,7 +398,7 @@ def add_transition(
     next_action_mask: np.ndarray,
 ) -> None:
     replay.add(state, action, reward, next_state, done, next_action_mask)
-    if not config.use_horizontal_symmetry_augmentation:
+    if not config.dqn.use_horizontal_symmetry_augmentation:
         return
 
     replay.add(

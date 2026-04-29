@@ -1,0 +1,199 @@
+global:
+  seed: 42
+  device: "auto" 
+  num_workers: 1
+  verbose: true
+
+environment:
+  board_height: 6
+  board_width: 7
+  win_length: 4
+
+dqn:
+  # Architecture
+  hidden_dim: 128
+  
+  # Learning
+  learning_rate: 0.0003
+  batch_size: 64
+  replay_buffer_size: 20000
+  min_replay_size: 128
+  gamma: 0.99
+  
+  # Exploration
+  epsilon_start: 1.0
+  epsilon_end: 0.05
+  epsilon_decay_steps: 6000
+  warmup_episodes: 40
+  
+  # Target network
+  target_update_freq: 200     # Hard update interval (if using hard updates)
+  tau: 0.02                   # Soft update rate (if using EMA)
+  
+  # Self-play
+  opponent_pool_size: 5
+  opponent_refresh_interval: 30
+  opponent_epsilon: 0.05
+  random_opponent_fraction: 0.2
+  heuristic_opponent_fraction: 0.2
+  
+  # Training limits
+  episodes: 500
+  gradient_updates_per_step: 2
+  use_horizontal_symmetry_augmentation: true
+  
+  # Evaluation
+  eval_interval: 30
+  eval_games: 12
+  checkpoint_score_heuristic_weight: 2.0
+
+ppo:
+  # Architecture
+  hidden_dim: 256
+  
+  # Learning
+  learning_rate: 0.00025
+  batch_size: 64              # Total batch size (rollout_episodes * steps)
+  minibatch_size: 32
+  n_epochs: 4
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_ratio: 0.2
+  entropy_coeff: 0.01
+  value_coeff: 0.5
+  max_grad_norm: 0.5
+  
+  # Rollout collection
+  rollout_length: 128
+  rollout_episodes_per_update: 8
+  use_horizontal_symmetry_augmentation: true
+  anneal_learning_rate: true
+  
+  # Self-play
+  opponent_pool_size: 5
+  warmup_episodes: 40
+  random_opponent_fraction: 0.2
+  heuristic_opponent_fraction: 0.2
+  reward_shaping: true
+  reward_shaping_scale: 10.0
+  
+  # Training limits
+  episodes: 500
+  
+  # Evaluation
+  eval_interval: 50
+  eval_games: 24
+  checkpoint_score_heuristic_weight: 2.0
+
+alphazero:
+  episodes: 300
+  learning_rate: 0.00025
+  weight_decay: 0.0001
+  batch_size: 64
+  replay_capacity: 20000
+  replay_warmup_games: 16
+  update_epochs: 4
+  updates_per_episode: 2
+  hidden_dim: 256
+  mcts_simulations: 120
+  eval_mcts_simulations: 200
+  c_puct: 1.5
+  dirichlet_alpha: 0.3
+  dirichlet_epsilon: 0.25
+  temperature: 1.0
+  temperature_drop_move: 8
+  eval_interval: 25
+  eval_games: 24
+  seed: 0
+  device: "auto"
+  checkpoint_score_heuristic_weight: 2.0
+  use_horizontal_symmetry_augmentation: true
+  value_loss_coef: 1.0
+  max_grad_norm: 5.0
+  anneal_learning_rate: true
+  root_noise_each_move: true
+
+# MCTS Baseline Configuration
+mcts:
+  simulations: 100
+  exploration_weight: 1.0
+  use_heuristic_rollout: true
+
+# Evaluation and Logging
+evaluation:
+  games_per_matchup: 20
+  calculate_elo: true
+  log_dir: "./outputs"
+  save_checkpoints: true
+  checkpoint_freq: 50
+  save_best_model: true
+  save_game_traces: false
+  record_game_videos: false
+
+baselines:
+  random:
+    type: "random"
+  heuristic:
+    type: "heuristic"
+  mcts:
+    type: "mcts"
+    simulations: 100
+
+# Notebook-specific configurations for testing and development
+notebook_settings:
+  # Seed is inherited from global.seed if not specified here
+  
+  # Quick test configuration (reduced for rapid iteration)
+  quick_test:
+    episodes: 180
+    eval_interval: 30
+    eval_games: 12
+    mcts_simulations: 30
+    eval_mcts_simulations: 50
+  
+  # Test parameters for specific scenarios
+  testing:
+    baseline:
+      games_per_pair: 20
+    
+    mcts:
+      games_per_pair: 4
+      default_simulations: 80
+      simulation_sweep: [20, 40, 80, 120]
+      sweep_games_per_pair: 20
+    
+    model_comparison:
+      games_per_pair: 20  # Increase to 200 for final run
+      mcts_simulations: 50  # Increase to 200 for final run
+      validation_games_vs_random: 100
+      validation_threshold: 0.95
+  
+  # Seeds for ablation studies
+  ablation_seeds: [7, 17, 27]
+  
+  # Ablation variants configuration
+  ablation_variants:
+    dqn:
+      - name: "base"
+        params: {}
+      - name: "more_updates"
+        params:
+          gradient_updates_per_step: 3
+      - name: "no_symmetry"
+        params:
+          gradient_updates_per_step: 3
+          use_horizontal_symmetry_augmentation: false
+    
+    ppo:
+      - name: "base"
+        params: {}
+      - name: "no_shaping"
+        params:
+          use_reward_shaping: false
+      - name: "conservative"
+        params:
+          learning_rate: 1.5e-4
+          entropy_coeff: 0.01
+          rollout_episodes_per_update: 12
+    
+    alphazero: []  # No ablation variants for AlphaZero
