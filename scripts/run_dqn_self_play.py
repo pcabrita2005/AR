@@ -9,28 +9,25 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from connect4_rl.agents.learning import DQNConfig
+from connect4_rl.config import load_config
 from connect4_rl.experiments.dqn_training import train_dqn_self_play
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train a self-play DQN agent for Connect Four.")
-    parser.add_argument("--episodes", type=int, default=300)
-    parser.add_argument("--eval-interval", type=int, default=50)
-    parser.add_argument("--eval-games", type=int, default=24)
+    parser.add_argument("--config", type=str, default="config.yaml", help="Path to config file")
+    parser.add_argument("--episodes", type=int, help="Override episodes from config")
     parser.add_argument("--checkpoint-dir", type=str, default="outputs/dqn_checkpoints")
-    parser.add_argument("--device", type=str, default="cpu")
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    config = DQNConfig(
-        episodes=args.episodes,
-        eval_interval=args.eval_interval,
-        eval_games=args.eval_games,
-        device=args.device,
-    )
+    config = load_config(args.config)
+    
+    if args.episodes:
+        config.dqn.max_episodes = args.episodes
+        
     agent, metrics = train_dqn_self_play(config, checkpoint_dir=args.checkpoint_dir)
     del agent
 

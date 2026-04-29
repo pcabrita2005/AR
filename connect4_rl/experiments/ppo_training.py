@@ -10,7 +10,9 @@ import torch
 
 from connect4_rl.agents.baselines import HeuristicAgent, RandomAgent
 from connect4_rl.agents.baselines.heuristic_agent import score_position
-from connect4_rl.agents.learning.ppo import ConnectFourActorCritic, PPOAgent, PPOConfig
+from connect4_rl.agents.learning.ppo import ConnectFourActorCritic, PPOAgent
+from connect4_rl.config import Config, PPOConfig
+from connect4_rl.utils.seed_utils import set_all_seeds
 from connect4_rl.envs.connect_four import apply_action, encode_state, initial_state, is_terminal, legal_actions, outcome_for_player
 
 
@@ -29,22 +31,23 @@ class PPOMetrics:
 
 
 def train_ppo_self_play(
-    config: PPOConfig | None = None,
+    config: Config | None = None,
     *,
     checkpoint_dir: str | Path | None = None,
 ) -> tuple[PPOAgent, PPOMetrics]:
-    config = config or PPOConfig()
-    rng = random.Random(config.seed)
-    np.random.seed(config.seed)
-    torch.manual_seed(config.seed)
+    from connect4_rl.config import get_default_config
+    config = config or get_default_config()
+    set_all_seeds(config.global_.seed)
+    rng = random.Random(config.global_.seed)
 
-    device = torch.device(config.device)
-    network = ConnectFourActorCritic(hidden_dim=config.hidden_dim).to(device)
-    optimizer = torch.optim.AdamW(network.parameters(), lr=config.learning_rate)
+    device = torch.device(config.resolve_device())
+    network = ConnectFourActorCritic(hidden_dim=config.ppo.hidden_dim).to(device)
+    optimizer = torch.optim.AdamW(network.parameters(), lr=config.ppo.learning_rate)
 
-    metrics = PPOMetrics(config=asdict(config))
+    metrics = PPOMetrics(config=asdict(config.ppo))
     best_state_dict = clone_state_dict(network)
     previous_eval_state_dict: dict[str, torch.Tensor] | None = None
+    opponent_pool: list[dict[str, torch.Tensor]] = [clone_state_dict(network)]
     rollout_buffer: list[dict[str, object]] = []
 
     checkpoint_path = None
@@ -52,18 +55,26 @@ def train_ppo_self_play(
         checkpoint_path = Path(checkpoint_dir)
         checkpoint_path.mkdir(parents=True, exist_ok=True)
 
-    for episode in range(1, config.episodes + 1):
+    for episode in range(1, config.ppo.episodes + 1):
         opponent_kind = build_training_mode(config, episode, rng)
 
         if opponent_kind == "self_play":
-            trajectories, episode_reward, episode_steps = collect_self_play_episode(network, device, config)
+            # Select random opponent from pool
+            opponent_state_dict = rng.choice(opponent_pool)
+            opponent_network = ConnectFourActorCritic(hidden_dim=config.ppo.hidden_dim).to(device)
+            opponent_network.load_state_dict(opponent_state_dict)
+            opponent_network.eval()
+            
+            trajectories, episode_reward, episode_steps = collect_self_play_episode(
+                network, device, config, opponent_network=opponent_network
+            )
             for trajectory in trajectories:
                 if trajectory:
                     rollout_buffer.extend(
-                        augment_trajectory(trajectory) if config.use_horizontal_symmetry_augmentation else trajectory
+                        augment_trajectory(trajectory) if config.ppo.use_horizontal_symmetry_augmentation else trajectory
                     )
         else:
-            opponent_agent = build_fixed_opponent(opponent_kind, config.seed + episode)
+            opponent_agent = build_fixed_opponent(opponent_kind, config.global_.seed + episode)
             controlled_player = 1 if rng.random() < 0.5 else 2
             trajectory, episode_reward, episode_steps = collect_policy_episode_against_opponent(
                 network,
@@ -73,11 +84,17 @@ def train_ppo_self_play(
                 config,
             )
             if trajectory:
-                rollout_buffer.extend(augment_trajectory(trajectory) if config.use_horizontal_symmetry_augmentation else trajectory)
+                rollout_buffer.extend(augment_trajectory(trajectory) if config.ppo.use_horizontal_symmetry_augmentation else trajectory)
 
-        if rollout_buffer and (episode % config.rollout_episodes_per_update == 0 or episode == config.episodes):
+        if rollout_buffer and (episode % config.ppo.rollout_episodes_per_update == 0 or episode == config.ppo.episodes):
             maybe_anneal_learning_rate(optimizer, config, episode)
             policy_loss, value_loss, entropy = update_ppo(network, optimizer, rollout_buffer, config, device)
+            
+            # Update opponent pool after training step
+            if episode % config.ppo.rollout_episodes_per_update == 0:
+                opponent_pool.append(clone_state_dict(network))
+                opponent_pool = opponent_pool[-config.ppo.opponent_pool_size :]
+                metrics.opponent_kinds.append(f"pool_{len(opponent_pool)}")
             metrics.policy_losses.append(policy_loss)
             metrics.value_losses.append(value_loss)
             metrics.entropies.append(entropy)
@@ -87,33 +104,33 @@ def train_ppo_self_play(
         metrics.episode_lengths.append(episode_steps)
         metrics.opponent_kinds.append(opponent_kind)
 
-        if checkpoint_path is not None and (episode % config.eval_interval == 0 or episode == config.episodes):
+        if checkpoint_path is not None and (episode % config.ppo.eval_interval == 0 or episode == config.ppo.max_episodes):
             torch.save(network.state_dict(), checkpoint_path / f"ppo_episode_{episode:04d}.pt")
 
-        if episode % config.eval_interval == 0 or episode == config.episodes:
-            eval_agent = PPOAgent(network, device=config.device, sample_actions=False, seed=config.seed)
+        if episode % config.ppo.eval_interval == 0 or episode == config.ppo.max_episodes:
+            eval_agent = PPOAgent(network, device=config.resolve_device(), sample_actions=False, seed=config.global_.seed)
             random_wr = evaluate_against_agent(
                 eval_agent,
-                lambda game_idx: RandomAgent(seed=config.seed + 10_000 + game_idx),
-                games=config.eval_games,
+                lambda game_idx: RandomAgent(seed=config.global_.seed + 10_000 + game_idx),
+                games=config.ppo.eval_games,
             )
             heuristic_wr = evaluate_against_agent(
                 eval_agent,
-                lambda game_idx: HeuristicAgent(seed=config.seed + 20_000 + game_idx),
-                games=config.eval_games,
+                lambda game_idx: HeuristicAgent(seed=config.global_.seed + 20_000 + game_idx),
+                games=config.ppo.eval_games,
             )
             previous_wr = 0.0
             if previous_eval_state_dict is not None:
                 previous_wr = evaluate_against_agent(
                     eval_agent,
                     lambda game_idx: PPOAgent(
-                        _load_previous_ppo_network(previous_eval_state_dict, config.hidden_dim),
-                        device=config.device,
+                        _load_previous_ppo_network(previous_eval_state_dict, config.ppo.fc_hidden),
+                        device=config.resolve_device(),
                         sample_actions=False,
-                        seed=config.seed + 30_000 + game_idx,
+                        seed=config.global_.seed + 30_000 + game_idx,
                         name="previous_snapshot",
                     ),
-                    games=config.eval_games,
+                    games=config.ppo.eval_games,
                 )
             metrics.evaluation.append(
                 {
@@ -123,7 +140,7 @@ def train_ppo_self_play(
                     "vs_previous_win_rate": previous_wr,
                 }
             )
-            score = heuristic_wr * config.checkpoint_score_heuristic_weight + random_wr
+            score = heuristic_wr * config.ppo.checkpoint_score_heuristic_weight + random_wr
             if score >= metrics.best_score:
                 metrics.best_score = score
                 best_state_dict = clone_state_dict(network)
@@ -136,7 +153,7 @@ def train_ppo_self_play(
             previous_eval_state_dict = clone_state_dict(network)
 
     network.load_state_dict(best_state_dict)
-    final_agent = PPOAgent(network, device=config.device, sample_actions=False, seed=config.seed)
+    final_agent = PPOAgent(network, device=config.resolve_device(), sample_actions=False, seed=config.global_.seed)
     if checkpoint_path is not None:
         write_metrics_snapshot(metrics, checkpoint_path / "metrics_final.json")
     return final_agent, metrics
@@ -146,7 +163,7 @@ def update_ppo(
     network: ConnectFourActorCritic,
     optimizer: torch.optim.Optimizer,
     trajectory: list[dict[str, object]],
-    config: PPOConfig,
+    config: Config,
     device: torch.device,
 ) -> tuple[float, float, float]:
     states = torch.tensor(np.stack([step["state"] for step in trajectory]), dtype=torch.float32, device=device)
@@ -157,7 +174,7 @@ def update_ppo(
     rewards = torch.tensor([step["reward"] for step in trajectory], dtype=torch.float32, device=device)
     dones = torch.tensor([step["done"] for step in trajectory], dtype=torch.float32, device=device)
 
-    returns, advantages = compute_gae(rewards, values, dones, config.gamma, config.gae_lambda)
+    returns, advantages = compute_gae(rewards, values, dones, config.ppo.gamma, config.ppo.gae_lambda)
     advantages = (advantages - advantages.mean()) / (advantages.std(unbiased=False) + 1e-8)
 
     policy_losses: list[float] = []
@@ -166,10 +183,10 @@ def update_ppo(
 
     network.train()
     batch_size = states.shape[0]
-    for _ in range(config.update_epochs):
+    for _ in range(config.ppo.n_epochs):
         indices = torch.randperm(batch_size, device=device)
-        for start in range(0, batch_size, config.minibatch_size):
-            end = min(start + config.minibatch_size, batch_size)
+        for start in range(0, batch_size, config.ppo.minibatch_size):
+            end = min(start + config.ppo.minibatch_size, batch_size)
             batch_indices = indices[start:end]
 
             logits, predicted_values = network(states[batch_indices])
@@ -180,14 +197,14 @@ def update_ppo(
 
             ratio = torch.exp(new_log_probs - old_log_probs[batch_indices])
             unclipped = ratio * advantages[batch_indices]
-            clipped = torch.clamp(ratio, 1.0 - config.clip_epsilon, 1.0 + config.clip_epsilon) * advantages[batch_indices]
+            clipped = torch.clamp(ratio, 1.0 - config.ppo.clip_ratio, 1.0 + config.ppo.clip_ratio) * advantages[batch_indices]
             policy_loss = -torch.min(unclipped, clipped).mean()
             value_loss = torch.nn.functional.smooth_l1_loss(predicted_values, returns[batch_indices])
-            loss = policy_loss + config.value_loss_coef * value_loss - config.entropy_coef * entropy
+            loss = policy_loss + config.ppo.value_coeff * value_loss - config.ppo.entropy_coeff * entropy
 
             optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(network.parameters(), config.max_grad_norm)
+            torch.nn.utils.clip_grad_norm_(network.parameters(), config.ppo.max_grad_norm)
             optimizer.step()
 
             policy_losses.append(float(policy_loss.item()))
@@ -249,13 +266,13 @@ def finalize_last_transition(trajectory: list[dict[str, object]], terminal_rewar
 
 def maybe_anneal_learning_rate(
     optimizer: torch.optim.Optimizer,
-    config: PPOConfig,
+    config: Config,
     episode: int,
 ) -> None:
-    if not config.anneal_learning_rate:
+    if not config.ppo.anneal_learning_rate:
         return
-    progress = max(0.0, 1.0 - ((episode - 1) / max(config.episodes, 1)))
-    current_lr = config.learning_rate * progress
+    progress = max(0.0, 1.0 - ((episode - 1) / max(config.ppo.max_episodes, 1)))
+    current_lr = config.ppo.learning_rate * progress
     for param_group in optimizer.param_groups:
         param_group["lr"] = current_lr
 
@@ -263,15 +280,25 @@ def maybe_anneal_learning_rate(
 def collect_self_play_episode(
     network: ConnectFourActorCritic,
     device: torch.device,
-    config: PPOConfig,
+    config: Config,
+    opponent_network: ConnectFourActorCritic | None = None,
 ) -> tuple[list[list[dict[str, object]]], float, int]:
+    """
+    Collect a self-play episode. If opponent_network is None, both players use the same network.
+    Otherwise, player 1 uses network and player 2 uses opponent_network.
+    """
+    if opponent_network is None:
+        opponent_network = network
+    
     trajectories: dict[int, list[dict[str, object]]] = {1: [], 2: []}
     state = initial_state()
     episode_steps = 0
 
     while not is_terminal(state):
         player = state.current_player
-        action, log_prob, value, entropy, action_mask = sample_policy_action(network, state, player, device)
+        # Use network for player 1, opponent_network for player 2
+        current_network = network if player == 1 else opponent_network
+        action, log_prob, value, entropy, action_mask = sample_policy_action(current_network, state, player, device)
         next_state = apply_action(state, action)
         reward = compute_step_reward(state, next_state, player, config)
         trajectories[player].append(
@@ -301,7 +328,7 @@ def collect_policy_episode_against_opponent(
     device: torch.device,
     opponent_agent,
     controlled_player: int,
-    config: PPOConfig,
+    config: Config,
 ) -> tuple[list[dict[str, object]], float, int]:
     trajectory: list[dict[str, object]] = []
     state = initial_state()
@@ -372,32 +399,33 @@ def compute_step_reward(
     state,
     next_state,
     player: int,
-    config: PPOConfig,
+    config: Config,
 ) -> float:
     if is_terminal(next_state):
         return outcome_for_player(next_state, player)
-    if not config.use_reward_shaping:
+    if not config.ppo.reward_shaping:
         return 0.0
     previous_score = score_position(state, player)
     next_score = score_position(next_state, player)
     delta = float(next_score - previous_score)
-    return float(config.reward_shaping_scale * np.tanh(delta / 100.0))
+    return float(config.ppo.reward_shaping_scale * np.tanh(delta / 100.0))
 
 
 def build_training_mode(
-    config: PPOConfig,
+    config: Config,
     episode: int,
     rng: random.Random,
 ) -> str:
-    if episode <= config.warmup_episodes:
-        if episode <= max(1, (config.warmup_episodes * 3) // 4):
+    warmup = config.ppo.warmup_episodes
+    if episode <= warmup:
+        if episode <= max(1, (warmup * 3) // 4):
             return "random"
         return "heuristic"
 
     draw = rng.random()
-    if draw < config.random_opponent_fraction:
+    if draw < config.ppo.random_opponent_fraction:
         return "random"
-    if draw < config.random_opponent_fraction + config.heuristic_opponent_fraction:
+    if draw < config.ppo.random_opponent_fraction + config.ppo.heuristic_opponent_fraction:
         return "heuristic"
     return "self_play"
 

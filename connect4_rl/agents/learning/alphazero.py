@@ -11,37 +11,10 @@ import numpy as np
 import torch
 from torch import nn
 
+from connect4_rl.config import AlphaZeroConfig
 from connect4_rl.envs.connect_four import ConnectFourState, encode_state
 
 
-@dataclass
-class AlphaZeroConfig:
-    episodes: int = 300
-    learning_rate: float = 2.5e-4
-    weight_decay: float = 1e-4
-    batch_size: int = 64
-    replay_capacity: int = 20_000
-    replay_warmup_games: int = 16
-    update_epochs: int = 4
-    updates_per_episode: int = 2
-    hidden_dim: int = 256
-    mcts_simulations: int = 120
-    eval_mcts_simulations: int | None = 200
-    c_puct: float = 1.5
-    dirichlet_alpha: float = 0.3
-    dirichlet_epsilon: float = 0.25
-    temperature: float = 1.0
-    temperature_drop_move: int = 8
-    eval_interval: int = 25
-    eval_games: int = 24
-    seed: int = 0
-    device: str = "cpu"
-    checkpoint_score_heuristic_weight: float = 2.0
-    use_horizontal_symmetry_augmentation: bool = True
-    value_loss_coef: float = 1.0
-    max_grad_norm: float = 5.0
-    anneal_learning_rate: bool = True
-    root_noise_each_move: bool = True
 
 
 class ConnectFourPolicyValueNet(nn.Module):

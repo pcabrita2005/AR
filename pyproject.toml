@@ -9,9 +9,10 @@ description = "Connect Four with self-play reinforcement learning and planning b
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-  "numpy",
-  "matplotlib",
-  "torch",
+  "numpy>=1.24,<2.0",
+  "matplotlib>=3.7,<4.0",
+  "torch>=2.0,<3.0",
+  "PyYAML>=6.0,<7.0",
 ]
 
 [tool.setuptools.packages.find]

@@ -10,36 +10,10 @@ import numpy as np
 import torch
 from torch import nn
 
+from connect4_rl.config import DQNConfig
 from connect4_rl.envs.connect_four import ConnectFourState, encode_state
 
 
-@dataclass
-class DQNConfig:
-    episodes: int = 500
-    gamma: float = 0.99
-    learning_rate: float = 3e-4
-    batch_size: int = 64
-    replay_capacity: int = 20_000
-    min_replay_size: int = 128
-    target_sync_interval: int = 200
-    target_ema_tau: float = 0.02
-    opponent_refresh_interval: int = 30
-    opponent_pool_size: int = 5
-    hidden_dim: int = 128
-    epsilon_start: float = 1.0
-    epsilon_end: float = 0.05
-    epsilon_decay_steps: int = 6_000
-    warmup_episodes: int = 40
-    opponent_epsilon: float = 0.05
-    gradient_updates_per_step: int = 2
-    random_opponent_fraction: float = 0.20
-    heuristic_opponent_fraction: float = 0.20
-    eval_interval: int = 50
-    eval_games: int = 24
-    seed: int = 0
-    device: str = "cpu"
-    checkpoint_score_heuristic_weight: float = 2.0
-    use_horizontal_symmetry_augmentation: bool = True
 
 
 class ReplayBuffer:
