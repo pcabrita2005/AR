@@ -104,10 +104,10 @@ def train_ppo_self_play(
         metrics.episode_lengths.append(episode_steps)
         metrics.opponent_kinds.append(opponent_kind)
 
-        if checkpoint_path is not None and (episode % config.ppo.eval_interval == 0 or episode == config.ppo.max_episodes):
+        if checkpoint_path is not None and (episode % config.ppo.eval_interval == 0 or episode == config.ppo.episodes):
             torch.save(network.state_dict(), checkpoint_path / f"ppo_episode_{episode:04d}.pt")
 
-        if episode % config.ppo.eval_interval == 0 or episode == config.ppo.max_episodes:
+        if episode % config.ppo.eval_interval == 0 or episode == config.ppo.episodes:
             eval_agent = PPOAgent(network, device=config.resolve_device(), sample_actions=False, seed=config.global_.seed)
             random_wr = evaluate_against_agent(
                 eval_agent,
@@ -124,7 +124,7 @@ def train_ppo_self_play(
                 previous_wr = evaluate_against_agent(
                     eval_agent,
                     lambda game_idx: PPOAgent(
-                        _load_previous_ppo_network(previous_eval_state_dict, config.ppo.fc_hidden),
+                        _load_previous_ppo_network(previous_eval_state_dict, config.ppo.hidden_dim),
                         device=config.resolve_device(),
                         sample_actions=False,
                         seed=config.global_.seed + 30_000 + game_idx,
@@ -271,7 +271,7 @@ def maybe_anneal_learning_rate(
 ) -> None:
     if not config.ppo.anneal_learning_rate:
         return
-    progress = max(0.0, 1.0 - ((episode - 1) / max(config.ppo.max_episodes, 1)))
+    progress = max(0.0, 1.0 - ((episode - 1) / max(config.ppo.episodes, 1)))
     current_lr = config.ppo.learning_rate * progress
     for param_group in optimizer.param_groups:
         param_group["lr"] = current_lr

@@ -17,6 +17,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train a self-play PPO agent for Connect Four.")
     parser.add_argument("--config", type=str, default="config.yaml", help="Path to config file")
     parser.add_argument("--episodes", type=int, help="Override episodes from config")
+    parser.add_argument("--eval-interval", type=int, help="Override evaluation interval from config")
+    parser.add_argument("--eval-games", type=int, help="Override number of evaluation games from config")
     parser.add_argument("--checkpoint-dir", type=str, default="outputs/ppo_checkpoints")
     return parser.parse_args()
 
@@ -26,7 +28,11 @@ def main() -> None:
     config = load_config(args.config)
     
     if args.episodes:
-        config.ppo.max_episodes = args.episodes
+        config.ppo.episodes = args.episodes
+    if args.eval_interval:
+        config.ppo.eval_interval = args.eval_interval
+    if args.eval_games:
+        config.ppo.eval_games = args.eval_games
         
     _agent, metrics = train_ppo_self_play(config, checkpoint_dir=args.checkpoint_dir)
     summary = {

@@ -13,8 +13,8 @@ from torch import nn
 from connect4_rl.config import DQNConfig
 from connect4_rl.envs.connect_four import ConnectFourState, encode_state
 
-
-
+BOARD_HEIGHT = 6
+BOARD_WIDTH = 7
 
 class ReplayBuffer:
     def __init__(self, capacity: int) -> None:
@@ -49,20 +49,48 @@ class ReplayBuffer:
 
 
 class ConnectFourQNetwork(nn.Module):
-    def __init__(self, hidden_dim: int = 128) -> None:
+    def __init__(
+        self,
+        hidden_dim: int = 128,
+        *,
+        channel_sizes: Sequence[int] | None = None,
+        kernel_sizes: Sequence[int] | None = None,
+        stride_sizes: Sequence[int] | None = None,
+        head_hidden_sizes: Sequence[int] | None = None,
+    ) -> None:
         super().__init__()
-        self.features = nn.Sequential(
-            nn.Conv2d(2, 32, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.Flatten(),
-        )
-        self.head = nn.Sequential(
-            nn.Linear(64 * 6 * 7, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 7),
-        )
+        channel_sizes = list(channel_sizes or [128])
+        kernel_sizes = list(kernel_sizes or [4])
+        stride_sizes = list(stride_sizes or [1])
+        head_hidden_sizes = list(head_hidden_sizes or [64, 64])
+        if not (len(channel_sizes) == len(kernel_sizes) == len(stride_sizes)):
+            raise ValueError("channel_sizes, kernel_sizes and stride_sizes must have the same length")
+
+        feature_layers: list[nn.Module] = []
+        in_channels = 2
+        current_height = BOARD_HEIGHT
+        current_width = BOARD_WIDTH
+        for out_channels, kernel_size, stride in zip(channel_sizes, kernel_sizes, stride_sizes):
+            feature_layers.append(nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride))
+            feature_layers.append(nn.ReLU())
+            current_height = ((current_height - kernel_size) // stride) + 1
+            current_width = ((current_width - kernel_size) // stride) + 1
+            if current_height < 1 or current_width < 1:
+                raise ValueError("Invalid convolution configuration for Connect Four board size")
+            in_channels = out_channels
+        feature_layers.append(nn.Flatten())
+        self.features = nn.Sequential(*feature_layers)
+
+        feature_dim = in_channels * current_height * current_width
+        head_layers: list[nn.Module] = []
+        in_dim = feature_dim
+        hidden_layers = list(head_hidden_sizes) or [hidden_dim]
+        for layer_dim in hidden_layers:
+            head_layers.append(nn.Linear(in_dim, layer_dim))
+            head_layers.append(nn.ReLU())
+            in_dim = layer_dim
+        head_layers.append(nn.Linear(in_dim, 7))
+        self.head = nn.Sequential(*head_layers)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.head(self.features(x))
@@ -113,8 +141,18 @@ class DQNAgent:
         epsilon: float = 0.0,
         seed: int = 0,
         hidden_dim: int = 128,
+        channel_sizes: Sequence[int] | None = None,
+        kernel_sizes: Sequence[int] | None = None,
+        stride_sizes: Sequence[int] | None = None,
+        head_hidden_sizes: Sequence[int] | None = None,
     ) -> "DQNAgent":
-        network = ConnectFourQNetwork(hidden_dim=hidden_dim)
+        network = ConnectFourQNetwork(
+            hidden_dim=hidden_dim,
+            channel_sizes=channel_sizes,
+            kernel_sizes=kernel_sizes,
+            stride_sizes=stride_sizes,
+            head_hidden_sizes=head_hidden_sizes,
+        )
         state_dict = torch.load(checkpoint_path, map_location=device)
         network.load_state_dict(state_dict)
         return cls(network, device=device, epsilon=epsilon, seed=seed)
@@ -129,8 +167,18 @@ def build_network_from_state_dict(
     *,
     device: str = "cpu",
     hidden_dim: int = 128,
+    channel_sizes: Sequence[int] | None = None,
+    kernel_sizes: Sequence[int] | None = None,
+    stride_sizes: Sequence[int] | None = None,
+    head_hidden_sizes: Sequence[int] | None = None,
 ) -> ConnectFourQNetwork:
-    network = ConnectFourQNetwork(hidden_dim=hidden_dim)
+    network = ConnectFourQNetwork(
+        hidden_dim=hidden_dim,
+        channel_sizes=channel_sizes,
+        kernel_sizes=kernel_sizes,
+        stride_sizes=stride_sizes,
+        head_hidden_sizes=head_hidden_sizes,
+    )
     network.load_state_dict(state_dict)
     return network.to(device)
 

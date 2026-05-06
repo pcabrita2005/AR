@@ -1,0 +1,12 @@
+name: lesson4_self_play
+fraction: 0.40
+opponent: self_play
+buffer_warm_up: false
+block_vertical_bias: 1.0
+rewards:
+  win: 1.0
+  vertical_win: 1.0
+  three_in_row: 0.01
+  opp_three_in_row: -0.01
+  lose: -1.0
+  play_continues: 0.0

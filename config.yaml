@@ -12,6 +12,10 @@ environment:
 dqn:
   # Architecture
   hidden_dim: 128
+  channel_sizes: [128]
+  kernel_sizes: [4]
+  stride_sizes: [1]
+  head_hidden_sizes: [64, 64]
   
   # Learning
   learning_rate: 0.0003
@@ -94,8 +98,12 @@ alphazero:
   replay_warmup_games: 16
   update_epochs: 4
   updates_per_episode: 2
-  hidden_dim: 256
+  n_filters: 128
+  n_res_blocks: 8
   mcts_simulations: 120
+  mcts_start_search_iter: 30
+  mcts_max_search_iter: 150
+  mcts_search_increment: 1
   eval_mcts_simulations: 200
   c_puct: 1.5
   dirichlet_alpha: 0.3
@@ -112,6 +120,7 @@ alphazero:
   max_grad_norm: 5.0
   anneal_learning_rate: true
   root_noise_each_move: true
+  tactical_eval_examples: 128
 
 # MCTS Baseline Configuration
 mcts:

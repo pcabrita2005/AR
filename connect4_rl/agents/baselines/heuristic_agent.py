@@ -66,25 +66,34 @@ def score_window(window: list[int], player: int, opponent: int) -> int:
     return 0
 
 
-class HeuristicAgent:
+class BaseHeuristicAgent:
     def __init__(self, seed: int | None = None, name: str = "heuristic") -> None:
         self.name = name
         self._rng = random.Random(seed)
 
-    def select_action(self, state: ConnectFourState, legal_actions: Sequence[int]) -> int:
+    def select_action(self, state: ConnectFourState, legal_actions_now: Sequence[int]) -> int:
+        raise NotImplementedError
+
+    def _score_state(self, state: ConnectFourState, player: int) -> int:
+        return score_position(state, player)
+
+    def _pick_best_scored_action(
+        self,
+        state: ConnectFourState,
+        legal_actions_now: Sequence[int],
+        *,
+        avoid_immediate_reply: bool,
+    ) -> int:
         player = state.current_player
         opponent = 2 if player == 1 else 1
 
-        winning_action = self._find_immediate_win(state, legal_actions, player)
-        if winning_action is not None:
-            return winning_action
-
-        blocking_action = self._find_immediate_win(state, legal_actions, opponent)
-        if blocking_action is not None:
-            return blocking_action
-
-        safe_actions = [action for action in legal_actions if not self._allows_immediate_reply_win(state, action, opponent)]
-        candidate_actions = safe_actions if safe_actions else list(legal_actions)
+        if avoid_immediate_reply:
+            safe_actions = [
+                action for action in legal_actions_now if not self._allows_immediate_reply_win(state, action, opponent)
+            ]
+            candidate_actions = safe_actions if safe_actions else list(legal_actions_now)
+        else:
+            candidate_actions = list(legal_actions_now)
 
         scored_actions = []
         for action in candidate_actions:
@@ -99,10 +108,10 @@ class HeuristicAgent:
     def _find_immediate_win(
         self,
         state: ConnectFourState,
-        legal_actions: Sequence[int],
+        legal_actions_now: Sequence[int],
         target_player: int,
     ) -> int | None:
-        for action in legal_actions:
+        for action in legal_actions_now:
             next_state = self._simulate_player_move(state, action, target_player)
             if next_state.winner == target_player:
                 return action
@@ -114,9 +123,6 @@ class HeuristicAgent:
             return False
         opponent_winning_reply = self._find_immediate_win(next_state, legal_actions(next_state), opponent)
         return opponent_winning_reply is not None
-
-    def _score_state(self, state: ConnectFourState, player: int) -> int:
-        return score_position(state, player)
 
     @staticmethod
     def _simulate_player_move(state: ConnectFourState, action: int, player: int) -> ConnectFourState:
@@ -131,3 +137,34 @@ class HeuristicAgent:
             last_action=state.last_action,
         )
         return apply_action(swapped_state, action)
+
+
+class WeakHeuristicAgent(BaseHeuristicAgent):
+    def __init__(self, seed: int | None = None, name: str = "weak_heuristic") -> None:
+        super().__init__(seed=seed, name=name)
+
+    def select_action(self, state: ConnectFourState, legal_actions_now: Sequence[int]) -> int:
+        return self._pick_best_scored_action(state, legal_actions_now, avoid_immediate_reply=False)
+
+
+class StrongHeuristicAgent(BaseHeuristicAgent):
+    def __init__(self, seed: int | None = None, name: str = "heuristic") -> None:
+        super().__init__(seed=seed, name=name)
+
+    def select_action(self, state: ConnectFourState, legal_actions_now: Sequence[int]) -> int:
+        player = state.current_player
+        opponent = 2 if player == 1 else 1
+
+        winning_action = self._find_immediate_win(state, legal_actions_now, player)
+        if winning_action is not None:
+            return winning_action
+
+        blocking_action = self._find_immediate_win(state, legal_actions_now, opponent)
+        if blocking_action is not None:
+            return blocking_action
+
+        return self._pick_best_scored_action(state, legal_actions_now, avoid_immediate_reply=True)
+
+
+class HeuristicAgent(StrongHeuristicAgent):
+    pass

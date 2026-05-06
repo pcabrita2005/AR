@@ -70,6 +70,7 @@ def round_robin_detailed(
                     "starter": result.starter,
                     "moves": result.moves,
                     "left_starts": int(left_starts),
+                    "left_player": player_for_left,
                 }
             )
 
@@ -107,7 +108,7 @@ def compute_elo_ratings(
             score_left = 0.5
             score_right = 0.5
         else:
-            left_player = 1 if left_starts else 2
+            left_player = int(match.get("left_player", 1 if left_starts else 2))
             if winner == left_player:
                 score_left = 1.0
                 score_right = 0.0

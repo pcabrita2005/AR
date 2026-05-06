@@ -1,5 +1,5 @@
 import unittest
-from connect4_rl.agents.baselines import RandomAgent, HeuristicAgent
+from connect4_rl.agents.baselines import HeuristicAgent, RandomAgent, StrongHeuristicAgent, WeakHeuristicAgent
 from connect4_rl.envs.connect_four import (
     initial_state,
     apply_action,
@@ -135,6 +135,28 @@ class TestAgentMatchup(unittest.TestCase):
         
         self.assertGreaterEqual(heuristic_wins, games // 2, 
                                f"Heuristic won {heuristic_wins}/{games}, expected at least {games//2}")
+
+    def test_strong_heuristic_beats_weak(self):
+        from connect4_rl.envs.connect_four import outcome_for_player
+
+        strong = StrongHeuristicAgent(seed=42)
+        weak = WeakHeuristicAgent(seed=99)
+
+        strong_wins = 0
+        games = 10
+        for _game in range(games):
+            state = initial_state()
+            while not is_terminal(state):
+                legal = legal_actions(state)
+                if state.current_player == 1:
+                    action = strong.select_action(state, legal)
+                else:
+                    action = weak.select_action(state, legal)
+                state = apply_action(state, action)
+            if outcome_for_player(state, 1) == 1.0:
+                strong_wins += 1
+
+        self.assertGreaterEqual(strong_wins, games // 2)
 
 
 if __name__ == "__main__":

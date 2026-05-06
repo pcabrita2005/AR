@@ -15,9 +15,11 @@ from connect4_rl.agents.learning.alphazero import (
     AlphaZeroConfig,
     ConnectFourPolicyValueNet,
     clone_state_dict,
+    encode_alphazero_state,
     run_policy_value_mcts,
+    sample_action_from_policy,
 )
-from connect4_rl.envs.connect_four import apply_action, encode_state, initial_state, is_terminal, legal_actions, outcome_for_player
+from connect4_rl.envs.connect_four import ConnectFourState, apply_action, initial_state, is_terminal, legal_actions, outcome_for_player
 
 
 @dataclass
@@ -28,6 +30,7 @@ class AlphaZeroMetrics:
     policy_losses: list[float] = field(default_factory=list)
     value_losses: list[float] = field(default_factory=list)
     evaluation: list[dict[str, float]] = field(default_factory=list)
+    tactical_accuracy: list[dict[str, float]] = field(default_factory=list)
     best_checkpoint_path: str = ""
     best_score: float = float("-inf")
 
@@ -43,7 +46,10 @@ def train_alphazero_self_play(
     torch.manual_seed(config.seed)
 
     device = torch.device(config.device)
-    network = ConnectFourPolicyValueNet(hidden_dim=config.hidden_dim).to(device)
+    network = ConnectFourPolicyValueNet(
+        n_filters=config.n_filters,
+        n_res_blocks=config.n_res_blocks,
+    ).to(device)
     optimizer = torch.optim.AdamW(network.parameters(), lr=config.learning_rate, weight_decay=config.weight_decay)
     replay_buffer: deque[tuple[np.ndarray, np.ndarray, float]] = deque(maxlen=config.replay_capacity)
 
@@ -59,7 +65,13 @@ def train_alphazero_self_play(
     eval_simulations = config.eval_mcts_simulations or config.mcts_simulations
 
     for episode in range(1, config.episodes + 1):
-        examples, final_reward, episode_steps = generate_self_play_episode(network, config, rng)
+        training_simulations = get_training_mcts_simulations(config, episode)
+        examples, final_reward, episode_steps = generate_self_play_episode(
+            network,
+            config,
+            rng,
+            simulations=training_simulations,
+        )
         replay_buffer.extend(examples)
 
         policy_loss = 0.0
@@ -107,7 +119,11 @@ def train_alphazero_self_play(
                 previous_wr = evaluate_against_agent(
                     eval_agent,
                     lambda game_idx: AlphaZeroAgent(
-                        _load_previous_alphazero_network(previous_eval_state_dict, config.hidden_dim),
+                        _load_previous_alphazero_network(
+                            previous_eval_state_dict,
+                            n_filters=config.n_filters,
+                            n_res_blocks=config.n_res_blocks,
+                        ),
                         simulations=eval_simulations,
                         c_puct=config.c_puct,
                         device=config.device,
@@ -123,6 +139,16 @@ def train_alphazero_self_play(
                     "vs_random_win_rate": random_wr,
                     "vs_heuristic_win_rate": heuristic_wr,
                     "vs_previous_win_rate": previous_wr,
+                }
+            )
+            metrics.tactical_accuracy.append(
+                {
+                    "episode": float(episode),
+                    "accuracy": evaluate_tactical_accuracy(
+                        network,
+                        config,
+                        examples_per_type=config.tactical_eval_examples,
+                    ),
                 }
             )
             score = heuristic_wr * config.checkpoint_score_heuristic_weight + random_wr
@@ -155,6 +181,8 @@ def generate_self_play_episode(
     network: ConnectFourPolicyValueNet,
     config: AlphaZeroConfig,
     rng: random.Random,
+    *,
+    simulations: int | None = None,
 ) -> tuple[list[tuple[np.ndarray, np.ndarray, float]], float, int]:
     examples: list[tuple[np.ndarray, np.ndarray, int]] = []
     state = initial_state()
@@ -165,7 +193,7 @@ def generate_self_play_episode(
         visit_policy = run_policy_value_mcts(
             network,
             state,
-            simulations=config.mcts_simulations,
+            simulations=simulations or config.mcts_simulations,
             c_puct=config.c_puct,
             device=config.device,
             root_dirichlet_alpha=config.dirichlet_alpha if root_noise else None,
@@ -174,28 +202,18 @@ def generate_self_play_episode(
         )
         temperature = config.temperature if episode_steps < config.temperature_drop_move else 0.0
         action = sample_action_from_policy(visit_policy, legal_actions(state), temperature=temperature, rng=rng)
-        examples.append((np.asarray(encode_state(state, state.current_player), dtype=np.float32), visit_policy.copy(), state.current_player))
+        examples.append((encode_alphazero_state(state, state.current_player), visit_policy.copy(), state.current_player))
         state = apply_action(state, action)
         episode_steps += 1
 
     final_examples: list[tuple[np.ndarray, np.ndarray, float]] = []
     for encoded_state, policy_target, player in examples:
-        final_examples.append((encoded_state, policy_target, outcome_for_player(state, player)))
+        final_value = outcome_for_player(state, player)
+        final_examples.append((encoded_state, policy_target, final_value))
         if config.use_horizontal_symmetry_augmentation:
-            final_examples.append((np.flip(encoded_state, axis=2).copy(), np.flip(policy_target, axis=0).copy(), outcome_for_player(state, player)))
+            final_examples.append((np.flip(encoded_state, axis=2).copy(), np.flip(policy_target, axis=0).copy(), final_value))
 
     return final_examples, outcome_for_player(state, 1), episode_steps
-
-
-def sample_action_from_policy(policy: np.ndarray, legal: list[int], *, temperature: float, rng: random.Random) -> int:
-    legal_probs = np.asarray([policy[action] for action in legal], dtype=np.float64)
-    if temperature <= 0.0:
-        return int(legal[int(np.argmax(legal_probs))])
-
-    legal_probs = np.power(np.maximum(legal_probs, 1e-8), 1.0 / temperature)
-    legal_probs /= legal_probs.sum()
-    return int(rng.choices(legal, weights=legal_probs.tolist(), k=1)[0])
-
 
 def update_policy_value_network(
     network: ConnectFourPolicyValueNet,
@@ -233,6 +251,16 @@ def update_policy_value_network(
 
     network.eval()
     return float(np.mean(policy_losses)), float(np.mean(value_losses))
+
+
+def get_training_mcts_simulations(config: AlphaZeroConfig, episode: int) -> int:
+    if config.mcts_start_search_iter is None:
+        return config.mcts_simulations
+
+    simulations = config.mcts_start_search_iter + max(episode - 1, 0) * config.mcts_search_increment
+    if config.mcts_max_search_iter is not None:
+        simulations = min(simulations, config.mcts_max_search_iter)
+    return max(1, simulations)
 
 
 def maybe_anneal_learning_rate(
@@ -274,8 +302,70 @@ def write_metrics_snapshot(metrics: AlphaZeroMetrics, path: Path) -> None:
 
 def _load_previous_alphazero_network(
     state_dict: dict[str, torch.Tensor],
-    hidden_dim: int,
+    *,
+    n_filters: int,
+    n_res_blocks: int,
 ) -> ConnectFourPolicyValueNet:
-    network = ConnectFourPolicyValueNet(hidden_dim=hidden_dim)
+    network = ConnectFourPolicyValueNet(n_filters=n_filters, n_res_blocks=n_res_blocks)
     network.load_state_dict(state_dict)
     return network
+
+
+def evaluate_tactical_accuracy(
+    network: ConnectFourPolicyValueNet,
+    config: AlphaZeroConfig,
+    *,
+    examples_per_type: int,
+) -> float:
+    states: list[np.ndarray] = []
+    targets: list[int] = []
+
+    for condition in ("win", "block"):
+        generated = 0
+        seed_offset = 1_000 if condition == "win" else 2_000
+        rng = random.Random(config.seed + seed_offset)
+        while generated < examples_per_type:
+            state = initial_state()
+            while not is_terminal(state):
+                legal = legal_actions(state)
+                tactical_action = find_tactical_action(state, legal, condition)
+                if tactical_action is not None:
+                    states.append(encode_alphazero_state(state, state.current_player))
+                    targets.append(tactical_action)
+                    generated += 1
+                    break
+                action = rng.choice(legal)
+                state = apply_action(state, action)
+
+    with torch.no_grad():
+        network.eval()
+        device = next(network.parameters()).device
+        x_target = torch.tensor(np.stack(states), dtype=torch.float32, device=device)
+        logits, _values = network(x_target)
+        predictions = logits.argmax(dim=1).detach().cpu().numpy()
+    return float(np.mean(predictions == np.asarray(targets)))
+
+
+def find_tactical_action(state: ConnectFourState, legal: list[int], condition: str) -> int | None:
+    current_player = state.current_player
+    opponent = 2 if current_player == 1 else 1
+
+    if condition == "win":
+        for action in legal:
+            next_state = apply_action(state, action)
+            if next_state.winner == current_player:
+                return action
+        return None
+
+    opponent_turn_state = ConnectFourState(
+        board=state.board,
+        current_player=opponent,
+        winner=state.winner,
+        moves_played=state.moves_played,
+        last_action=state.last_action,
+    )
+    for action in legal:
+        reply_state = apply_action(opponent_turn_state, action)
+        if reply_state.winner == opponent:
+            return action
+    return None

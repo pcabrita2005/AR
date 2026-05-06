@@ -1,0 +1,15 @@
+name: lesson1_random
+fraction: 0.15
+opponent: random
+buffer_warm_up: true
+warm_up_opponent: random
+warmup_replay_fill: 512
+agent_warmup_updates: 150
+block_vertical_bias: 4.0
+rewards:
+  win: 1.0
+  vertical_win: 0.7
+  three_in_row: 0.05
+  opp_three_in_row: -0.05
+  lose: -1.0
+  play_continues: 0.0

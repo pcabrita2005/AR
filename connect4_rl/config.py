@@ -38,6 +38,10 @@ class EnvironmentConfig:
 class DQNConfig:
     # Architecture
     hidden_dim: int = 128
+    channel_sizes: List[int] = field(default_factory=lambda: [128])
+    kernel_sizes: List[int] = field(default_factory=lambda: [4])
+    stride_sizes: List[int] = field(default_factory=lambda: [1])
+    head_hidden_sizes: List[int] = field(default_factory=lambda: [64, 64])
 
     # Learning
     learning_rate: float = 3e-4
@@ -88,6 +92,16 @@ class DQNConfig:
             raise ValueError(f"target_update_freq must be >= 1, got {self.target_update_freq}")
         if self.eval_interval < 1:
             raise ValueError(f"eval_interval must be >= 1, got {self.eval_interval}")
+        if not self.channel_sizes:
+            raise ValueError("channel_sizes must not be empty")
+        if not (len(self.channel_sizes) == len(self.kernel_sizes) == len(self.stride_sizes)):
+            raise ValueError("channel_sizes, kernel_sizes and stride_sizes must have the same length")
+        if any(value < 1 for value in self.channel_sizes + self.kernel_sizes + self.stride_sizes):
+            raise ValueError("channel_sizes, kernel_sizes and stride_sizes must all be >= 1")
+        if not self.head_hidden_sizes:
+            raise ValueError("head_hidden_sizes must not be empty")
+        if any(value < 1 for value in self.head_hidden_sizes):
+            raise ValueError("head_hidden_sizes must all be >= 1")
 
 
 @dataclass
@@ -156,8 +170,12 @@ class AlphaZeroConfig:
     replay_warmup_games: int = 16
     update_epochs: int = 4
     updates_per_episode: int = 2
-    hidden_dim: int = 256
+    n_filters: int = 128
+    n_res_blocks: int = 8
     mcts_simulations: int = 120
+    mcts_start_search_iter: int | None = None
+    mcts_max_search_iter: int | None = None
+    mcts_search_increment: int = 0
     eval_mcts_simulations: int | None = 200
     c_puct: float = 1.5
     dirichlet_alpha: float = 0.3
@@ -174,12 +192,32 @@ class AlphaZeroConfig:
     max_grad_norm: float = 5.0
     anneal_learning_rate: bool = True
     root_noise_each_move: bool = True
+    tactical_eval_examples: int = 128
 
     def validate(self):
         if self.learning_rate < 0:
             raise ValueError(f"learning_rate must be positive, got {self.learning_rate}")
+        if self.n_filters < 32:
+            raise ValueError(f"n_filters must be >= 32, got {self.n_filters}")
+        if self.n_res_blocks < 1:
+            raise ValueError(f"n_res_blocks must be >= 1, got {self.n_res_blocks}")
         if self.mcts_simulations < 1:
             raise ValueError(f"mcts_simulations must be >= 1, got {self.mcts_simulations}")
+        if self.mcts_start_search_iter is not None and self.mcts_start_search_iter < 1:
+            raise ValueError(f"mcts_start_search_iter must be >= 1, got {self.mcts_start_search_iter}")
+        if self.mcts_max_search_iter is not None and self.mcts_max_search_iter < 1:
+            raise ValueError(f"mcts_max_search_iter must be >= 1, got {self.mcts_max_search_iter}")
+        if self.mcts_search_increment < 0:
+            raise ValueError(f"mcts_search_increment must be >= 0, got {self.mcts_search_increment}")
+        if (
+            self.mcts_start_search_iter is not None
+            and self.mcts_max_search_iter is not None
+            and self.mcts_start_search_iter > self.mcts_max_search_iter
+        ):
+            raise ValueError(
+                "mcts_start_search_iter must be <= mcts_max_search_iter, "
+                f"got start={self.mcts_start_search_iter}, max={self.mcts_max_search_iter}"
+            )
         if self.c_puct <= 0:
             raise ValueError(f"c_puct must be > 0, got {self.c_puct}")
         if not 0 < self.dirichlet_alpha <= 1:
@@ -320,7 +358,7 @@ def load_config(config_path: str) -> Config:
     env_dict = data.get("environment", {})
     dqn_dict = data.get("dqn", {})
     ppo_dict = data.get("ppo", {})
-    alphazero_dict = data.get("alphazero", {})
+    alphazero_dict = dict(data.get("alphazero", {}))
     mcts_dict = data.get("mcts", {})
     eval_dict = data.get("evaluation", {})
     baselines_dict = data.get("baselines", {})
@@ -336,6 +374,9 @@ def load_config(config_path: str) -> Config:
     parsed_baselines = {}
     for name, baseline_config in baselines_dict.items():
         parsed_baselines[name] = BaselineConfig(**baseline_config)
+
+    # Backward compatibility with the old simplified AlphaZero config.
+    alphazero_dict.pop("hidden_dim", None)
 
     # Create config object
     config = Config(

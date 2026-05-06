@@ -1,0 +1,12 @@
+name: lesson3_strong
+fraction: 0.25
+opponent: strong
+buffer_warm_up: false
+block_vertical_bias: 1.0
+rewards:
+  win: 1.0
+  vertical_win: 1.0
+  three_in_row: 0.02
+  opp_three_in_row: -0.02
+  lose: -1.0
+  play_continues: 0.0
