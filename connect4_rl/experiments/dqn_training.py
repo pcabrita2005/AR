@@ -117,7 +117,7 @@ def train_dqn_with_curriculum(
     best_state_dict = clone_state_dict(online_net)
     previous_eval_state_dict: dict[str, torch.Tensor] | None = None
 
-    schedule, phase_summary = expand_curriculum_schedule(config.dqn.episodes, definition, seed=config.global_.seed)
+    schedule, phase_summary = expand_curriculum_schedule(config.dqn.max_episodes, definition, seed=config.global_.seed)
     metrics.phase_sequence = [phase.opponent_kind or "mixed" for phase in schedule]
     metrics.phase_summary = phase_summary
 
@@ -128,7 +128,7 @@ def train_dqn_with_curriculum(
 
     warmed_up_phase_names: set[str] = set()
 
-    for episode in range(1, config.dqn.episodes + 1):
+    for episode in range(1, config.dqn.max_episodes + 1):
         phase = schedule[episode - 1]
         if phase.buffer_warm_up and phase.name not in warmed_up_phase_names:
             replay = fill_replay_buffer_for_phase(
@@ -256,10 +256,10 @@ def train_dqn_with_curriculum(
             opponent_pool.append(clone_state_dict(online_net))
             opponent_pool = opponent_pool[-pool_size:]
 
-        if checkpoint_path is not None and (episode % config.dqn.eval_interval == 0 or episode == config.dqn.episodes):
+        if checkpoint_path is not None and (episode % config.dqn.eval_interval == 0 or episode == config.dqn.max_episodes):
             torch.save(online_net.state_dict(), checkpoint_path / f"dqn_episode_{episode:04d}.pt")
 
-        if episode % config.dqn.eval_interval == 0 or episode == config.dqn.episodes:
+        if episode % config.dqn.eval_interval == 0 or episode == config.dqn.max_episodes:
             eval_agent = DQNAgent(online_net, device=config.resolve_device(), epsilon=0.0, seed=config.global_.seed)
             random_wr = evaluate_against_agent(
                 eval_agent,

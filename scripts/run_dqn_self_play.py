@@ -30,6 +30,7 @@ def main() -> None:
     
     if args.episodes:
         config.dqn.episodes = args.episodes
+        config.dqn.max_episodes = args.episodes
     if args.eval_interval:
         config.dqn.eval_interval = args.eval_interval
     if args.eval_games:

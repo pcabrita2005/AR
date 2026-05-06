@@ -29,6 +29,7 @@ def main() -> None:
     
     if args.episodes:
         config.ppo.episodes = args.episodes
+        config.ppo.max_episodes = args.episodes
     if args.eval_interval:
         config.ppo.eval_interval = args.eval_interval
     if args.eval_games:
