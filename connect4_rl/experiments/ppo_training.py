@@ -55,7 +55,7 @@ def train_ppo_self_play(
         checkpoint_path = Path(checkpoint_dir)
         checkpoint_path.mkdir(parents=True, exist_ok=True)
 
-    for episode in range(1, config.ppo.max_episodes + 1):
+    for episode in range(1, config.ppo.episodes + 1):
         opponent_kind = build_training_mode(config, episode, rng)
 
         if opponent_kind == "self_play":
@@ -86,7 +86,7 @@ def train_ppo_self_play(
             if trajectory:
                 rollout_buffer.extend(augment_trajectory(trajectory) if config.ppo.use_horizontal_symmetry_augmentation else trajectory)
 
-        if rollout_buffer and (episode % config.ppo.rollout_episodes_per_update == 0 or episode == config.ppo.max_episodes):
+        if rollout_buffer and (episode % config.ppo.rollout_episodes_per_update == 0 or episode == config.ppo.episodes):
             maybe_anneal_learning_rate(optimizer, config, episode)
             policy_loss, value_loss, entropy = update_ppo(network, optimizer, rollout_buffer, config, device)
             
@@ -104,10 +104,10 @@ def train_ppo_self_play(
         metrics.episode_lengths.append(episode_steps)
         metrics.opponent_kinds.append(opponent_kind)
 
-        if checkpoint_path is not None and (episode % config.ppo.eval_interval == 0 or episode == config.ppo.max_episodes):
+        if checkpoint_path is not None and (episode % config.ppo.eval_interval == 0 or episode == config.ppo.episodes):
             torch.save(network.state_dict(), checkpoint_path / f"ppo_episode_{episode:04d}.pt")
 
-        if episode % config.ppo.eval_interval == 0 or episode == config.ppo.max_episodes:
+        if episode % config.ppo.eval_interval == 0 or episode == config.ppo.episodes:
             eval_agent = PPOAgent(network, device=config.resolve_device(), sample_actions=False, seed=config.global_.seed)
             random_wr = evaluate_against_agent(
                 eval_agent,
@@ -271,7 +271,7 @@ def maybe_anneal_learning_rate(
 ) -> None:
     if not config.ppo.anneal_learning_rate:
         return
-    progress = max(0.0, 1.0 - ((episode - 1) / max(config.ppo.max_episodes, 1)))
+    progress = max(0.0, 1.0 - ((episode - 1) / max(config.ppo.episodes, 1)))
     current_lr = config.ppo.learning_rate * progress
     for param_group in optimizer.param_groups:
         param_group["lr"] = current_lr
