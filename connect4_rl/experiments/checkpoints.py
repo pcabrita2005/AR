@@ -75,6 +75,7 @@ def build_agent_from_checkpoint(
             kernel_sizes=config.get("kernel_sizes"),
             stride_sizes=config.get("stride_sizes"),
             head_hidden_sizes=config.get("head_hidden_sizes"),
+            use_dueling_head=bool(config.get("use_dueling_head", True)),
         )
     if algorithm == "ppo":
         return PPOAgent.from_checkpoint(

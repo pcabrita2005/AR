@@ -1,8 +1,15 @@
 name: lesson3_strong
-fraction: 0.25
 opponent: strong
+opponent_pool_size:
+opponent_upgrade:
+eval_opponent: strong
+pretrained_path: outputs/models/dqn/lesson2_trained_agent.pt
+save_path: outputs/models/dqn/lesson3_trained_agent.pt
+max_train_episodes: 800000
 buffer_warm_up: false
-block_vertical_bias: 1.0
+warm_up_opponent:
+agent_warm_up: 0
+block_vert_coef: 1
 rewards:
   win: 1.0
   vertical_win: 1.0

@@ -1,11 +1,15 @@
 name: lesson1_random
-fraction: 0.15
 opponent: random
+opponent_pool_size:
+opponent_upgrade:
+eval_opponent: random
+pretrained_path:
+save_path: outputs/models/dqn/lesson1_trained_agent.pt
+max_train_episodes: 0
 buffer_warm_up: true
 warm_up_opponent: random
-warmup_replay_fill: 512
-agent_warmup_updates: 150
-block_vertical_bias: 4.0
+agent_warm_up: 300
+block_vert_coef: 4
 rewards:
   win: 1.0
   vertical_win: 0.7

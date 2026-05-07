@@ -42,38 +42,64 @@ class DQNConfig:
     kernel_sizes: List[int] = field(default_factory=lambda: [4])
     stride_sizes: List[int] = field(default_factory=lambda: [1])
     head_hidden_sizes: List[int] = field(default_factory=lambda: [64, 64])
+    use_dueling_head: bool = False
 
     # Learning
-    learning_rate: float = 3e-4
-    batch_size: int = 64
-    replay_buffer_size: int = 20000
-    min_replay_size: int = 128
+    learning_rate: float = 1e-4
+    batch_size: int = 256
+    replay_buffer_size: int = 100000
+    min_replay_size: int = 256
     gamma: float = 0.99
 
     # Exploration
     epsilon_start: float = 1.0
-    epsilon_end: float = 0.01
-    epsilon_decay_steps: int = 50000
+    epsilon_end: float = 0.1
+    epsilon_decay_rate: float = 0.9998
 
     # Target network
-    target_update_freq: int = 1000
-    tau: float = 0.001
+    target_update_freq: int = 1
+    tau: float = 0.01
 
     # Self-play
-    opponent_pool_size: int = 2
+    opponent_pool_size: int = 6
     opponent_refresh_interval: int = 30
     warmup_episodes: int = 40
-    random_opponent_fraction: float = 0.20
-    heuristic_opponent_fraction: float = 0.20
+    random_opponent_fraction: float = 0.05
+    heuristic_opponent_fraction: float = 0.45
     opponent_epsilon: float = 0.05
+    self_play_min_episodes_before_early_stop: int = 100
+    self_play_early_stop_patience_evals: int = 2
+
+    # Tutorial-style population training
+    population_size: int = 1
+    episodes_per_epoch: int = 10
+    evo_epochs: int = 1
+    evo_loop: int = 50
+    max_steps_per_episode: int = 500
+    tournament_size: int = 1
+
+    # Tutorial-style mutation settings
+    no_mutation_prob: float = 1.0
+    mutation_lr_prob: float = 0.0
+    mutation_batch_prob: float = 0.0
+    mutation_learn_step_prob: float = 0.0
+    mutation_grow_factor: float = 1.5
+    mutation_shrink_factor: float = 0.75
+    mutation_min_lr: float = 1e-4
+    mutation_max_lr: float = 1e-2
+    mutation_min_batch_size: int = 8
+    mutation_max_batch_size: int = 64
+    mutation_min_learn_step: int = 1
+    mutation_max_learn_step: int = 120
     
     # Evaluation
     eval_interval: int = 50
     eval_games: int = 24
-    checkpoint_score_heuristic_weight: float = 2.0
+    checkpoint_score_heuristic_weight: float = 6.0
 
     # Optimization
-    gradient_updates_per_step: int = 2
+    learn_step: int = 1
+    gradient_updates_per_step: int = 1
     use_horizontal_symmetry_augmentation: bool = True
 
     # Training limits
@@ -88,10 +114,81 @@ class DQNConfig:
             raise ValueError(f"gamma must be in (0, 1], got {self.gamma}")
         if not (0 <= self.epsilon_end <= self.epsilon_start <= 1):
             raise ValueError(f"must have 0 <= epsilon_end <= epsilon_start <= 1, got end={self.epsilon_end}, start={self.epsilon_start}")
+        if not 0 < self.epsilon_decay_rate <= 1:
+            raise ValueError(f"epsilon_decay_rate must be in (0, 1], got {self.epsilon_decay_rate}")
         if self.target_update_freq < 1:
             raise ValueError(f"target_update_freq must be >= 1, got {self.target_update_freq}")
+        if self.learn_step < 1:
+            raise ValueError(f"learn_step must be >= 1, got {self.learn_step}")
         if self.eval_interval < 1:
             raise ValueError(f"eval_interval must be >= 1, got {self.eval_interval}")
+        if self.population_size < 1:
+            raise ValueError(f"population_size must be >= 1, got {self.population_size}")
+        if self.episodes_per_epoch < 1:
+            raise ValueError(f"episodes_per_epoch must be >= 1, got {self.episodes_per_epoch}")
+        if self.evo_epochs < 1:
+            raise ValueError(f"evo_epochs must be >= 1, got {self.evo_epochs}")
+        if self.evo_loop < 1:
+            raise ValueError(f"evo_loop must be >= 1, got {self.evo_loop}")
+        if self.max_steps_per_episode < 1:
+            raise ValueError(f"max_steps_per_episode must be >= 1, got {self.max_steps_per_episode}")
+        if self.tournament_size < 1:
+            raise ValueError(f"tournament_size must be >= 1, got {self.tournament_size}")
+        if self.random_opponent_fraction < 0 or self.heuristic_opponent_fraction < 0:
+            raise ValueError("opponent mix fractions must be >= 0")
+        if self.random_opponent_fraction + self.heuristic_opponent_fraction > 1:
+            raise ValueError(
+                "random_opponent_fraction + heuristic_opponent_fraction must be <= 1, "
+                f"got {self.random_opponent_fraction + self.heuristic_opponent_fraction}"
+            )
+        if self.self_play_min_episodes_before_early_stop < 0:
+            raise ValueError(
+                "self_play_min_episodes_before_early_stop must be >= 0, "
+                f"got {self.self_play_min_episodes_before_early_stop}"
+            )
+        if self.self_play_early_stop_patience_evals < 1:
+            raise ValueError(
+                "self_play_early_stop_patience_evals must be >= 1, "
+                f"got {self.self_play_early_stop_patience_evals}"
+            )
+        if any(
+            value < 0
+            for value in [
+                self.no_mutation_prob,
+                self.mutation_lr_prob,
+                self.mutation_batch_prob,
+                self.mutation_learn_step_prob,
+            ]
+        ):
+            raise ValueError("mutation probabilities must be >= 0")
+        mutation_prob_sum = (
+            self.no_mutation_prob
+            + self.mutation_lr_prob
+            + self.mutation_batch_prob
+            + self.mutation_learn_step_prob
+        )
+        if mutation_prob_sum <= 0:
+            raise ValueError("sum of mutation probabilities must be > 0")
+        if self.mutation_grow_factor <= 1.0:
+            raise ValueError(f"mutation_grow_factor must be > 1, got {self.mutation_grow_factor}")
+        if not 0 < self.mutation_shrink_factor < 1:
+            raise ValueError(
+                f"mutation_shrink_factor must be in (0, 1), got {self.mutation_shrink_factor}"
+            )
+        if not (0 < self.mutation_min_lr <= self.mutation_max_lr):
+            raise ValueError(
+                f"mutation lr bounds invalid: min={self.mutation_min_lr}, max={self.mutation_max_lr}"
+            )
+        if not (1 <= self.mutation_min_batch_size <= self.mutation_max_batch_size):
+            raise ValueError(
+                "mutation batch size bounds invalid: "
+                f"min={self.mutation_min_batch_size}, max={self.mutation_max_batch_size}"
+            )
+        if not (1 <= self.mutation_min_learn_step <= self.mutation_max_learn_step):
+            raise ValueError(
+                "mutation learn_step bounds invalid: "
+                f"min={self.mutation_min_learn_step}, max={self.mutation_max_learn_step}"
+            )
         if not self.channel_sizes:
             raise ValueError("channel_sizes must not be empty")
         if not (len(self.channel_sizes) == len(self.kernel_sizes) == len(self.stride_sizes)):
@@ -162,28 +259,28 @@ class PPOConfig:
 
 @dataclass
 class AlphaZeroConfig:
-    episodes: int = 300
-    learning_rate: float = 2.5e-4
+    episodes: int = 800
+    learning_rate: float = 1e-3
     weight_decay: float = 1e-4
-    batch_size: int = 64
+    batch_size: int = 128
     replay_capacity: int = 20_000
-    replay_warmup_games: int = 16
-    update_epochs: int = 4
+    replay_warmup_games: int = 12
+    update_epochs: int = 1
     updates_per_episode: int = 2
-    n_filters: int = 128
-    n_res_blocks: int = 8
-    mcts_simulations: int = 120
-    mcts_start_search_iter: int | None = None
-    mcts_max_search_iter: int | None = None
-    mcts_search_increment: int = 0
-    eval_mcts_simulations: int | None = 200
-    c_puct: float = 1.5
-    dirichlet_alpha: float = 0.3
+    n_filters: int = 64
+    n_res_blocks: int = 4
+    mcts_simulations: int = 48
+    mcts_start_search_iter: int | None = 12
+    mcts_max_search_iter: int | None = 48
+    mcts_search_increment: int = 1
+    eval_mcts_simulations: int | None = 80
+    c_puct: float = 2.0
+    dirichlet_alpha: float = 1.0
     dirichlet_epsilon: float = 0.25
-    temperature: float = 1.0
+    temperature: float = 1.25
     temperature_drop_move: int = 8
-    eval_interval: int = 25
-    eval_games: int = 24
+    eval_interval: int = 40
+    eval_games: int = 16
     seed: int = 0
     device: str = "cpu"
     checkpoint_score_heuristic_weight: float = 2.0
@@ -192,7 +289,7 @@ class AlphaZeroConfig:
     max_grad_norm: float = 5.0
     anneal_learning_rate: bool = True
     root_noise_each_move: bool = True
-    tactical_eval_examples: int = 128
+    tactical_eval_examples: int = 96
 
     def validate(self):
         if self.learning_rate < 0:

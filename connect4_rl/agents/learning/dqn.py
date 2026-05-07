@@ -20,6 +20,7 @@ class ReplayBuffer:
     def __init__(self, capacity: int) -> None:
         self.capacity = capacity
         self._buffer: deque[tuple[np.ndarray, int, float, np.ndarray, bool, np.ndarray]] = deque(maxlen=capacity)
+        self.counter = 0
 
     def add(
         self,
@@ -31,6 +32,7 @@ class ReplayBuffer:
         next_action_mask: np.ndarray,
     ) -> None:
         self._buffer.append((state, action, reward, next_state, done, next_action_mask))
+        self.counter += 1
 
     def sample(self, batch_size: int, rng: random.Random) -> tuple[np.ndarray, ...]:
         batch = rng.sample(list(self._buffer), batch_size)
@@ -57,6 +59,7 @@ class ConnectFourQNetwork(nn.Module):
         kernel_sizes: Sequence[int] | None = None,
         stride_sizes: Sequence[int] | None = None,
         head_hidden_sizes: Sequence[int] | None = None,
+        use_dueling_head: bool = True,
     ) -> None:
         super().__init__()
         channel_sizes = list(channel_sizes or [128])
@@ -82,18 +85,25 @@ class ConnectFourQNetwork(nn.Module):
         self.features = nn.Sequential(*feature_layers)
 
         feature_dim = in_channels * current_height * current_width
-        head_layers: list[nn.Module] = []
-        in_dim = feature_dim
         hidden_layers = list(head_hidden_sizes) or [hidden_dim]
-        for layer_dim in hidden_layers:
-            head_layers.append(nn.Linear(in_dim, layer_dim))
-            head_layers.append(nn.ReLU())
-            in_dim = layer_dim
-        head_layers.append(nn.Linear(in_dim, 7))
-        self.head = nn.Sequential(*head_layers)
+        self.use_dueling_head = use_dueling_head
+        if self.use_dueling_head:
+            self.value_stream = build_mlp(feature_dim, hidden_layers, 1)
+            self.advantage_stream = build_mlp(feature_dim, hidden_layers, 7)
+            self.head = None
+        else:
+            self.value_stream = None
+            self.advantage_stream = None
+            self.head = build_mlp(feature_dim, hidden_layers, 7)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.head(self.features(x))
+        features = self.features(x)
+        if self.use_dueling_head:
+            value = self.value_stream(features)
+            advantage = self.advantage_stream(features)
+            centered_advantage = advantage - advantage.mean(dim=1, keepdim=True)
+            return value + centered_advantage
+        return self.head(features)
 
 
 class DQNAgent:
@@ -114,23 +124,45 @@ class DQNAgent:
         self._rng = random.Random(seed)
 
     def select_action(self, state: ConnectFourState, legal_actions: Sequence[int]) -> int:
-        if len(legal_actions) == 1:
-            return legal_actions[0]
+        state_array = np.asarray(encode_state(state, state.current_player), dtype=np.float32)
+        action_mask = legal_actions_to_mask(legal_actions)
+        return self.get_action(state_array, epsilon=self.epsilon, action_mask=action_mask)[0]
 
-        if self._rng.random() < self.epsilon:
-            return self._rng.choice(list(legal_actions))
+    def get_action(
+        self,
+        state_array: np.ndarray,
+        epsilon: float | None = None,
+        action_mask: Sequence[int] | np.ndarray | None = None,
+    ) -> list[int]:
+        epsilon = self.epsilon if epsilon is None else epsilon
+        if state_array.ndim == 3:
+            state_batch = np.expand_dims(state_array, axis=0)
+        else:
+            state_batch = state_array
+
+        if action_mask is None:
+            mask = np.ones(7, dtype=np.float32)
+        else:
+            mask = np.asarray(action_mask, dtype=np.float32)
+
+        legal = [idx for idx, value in enumerate(mask.tolist()) if value > 0]
+        if len(legal) == 1:
+            return [legal[0]]
+
+        if self._rng.random() < epsilon:
+            return [self._rng.choice(legal)]
 
         state_tensor = torch.tensor(
-            encode_state(state, state.current_player),
+            state_batch,
             dtype=torch.float32,
             device=self.device,
-        ).unsqueeze(0)
+        )
         with torch.no_grad():
             q_values = self.network(state_tensor).squeeze(0)
 
         masked_q_values = torch.full_like(q_values, -1e9)
-        masked_q_values[list(legal_actions)] = q_values[list(legal_actions)]
-        return int(torch.argmax(masked_q_values).item())
+        masked_q_values[legal] = q_values[legal]
+        return [int(torch.argmax(masked_q_values).item())]
 
     @classmethod
     def from_checkpoint(
@@ -145,6 +177,7 @@ class DQNAgent:
         kernel_sizes: Sequence[int] | None = None,
         stride_sizes: Sequence[int] | None = None,
         head_hidden_sizes: Sequence[int] | None = None,
+        use_dueling_head: bool = True,
     ) -> "DQNAgent":
         network = ConnectFourQNetwork(
             hidden_dim=hidden_dim,
@@ -152,6 +185,7 @@ class DQNAgent:
             kernel_sizes=kernel_sizes,
             stride_sizes=stride_sizes,
             head_hidden_sizes=head_hidden_sizes,
+            use_dueling_head=use_dueling_head,
         )
         state_dict = torch.load(checkpoint_path, map_location=device)
         network.load_state_dict(state_dict)
@@ -171,6 +205,7 @@ def build_network_from_state_dict(
     kernel_sizes: Sequence[int] | None = None,
     stride_sizes: Sequence[int] | None = None,
     head_hidden_sizes: Sequence[int] | None = None,
+    use_dueling_head: bool = True,
 ) -> ConnectFourQNetwork:
     network = ConnectFourQNetwork(
         hidden_dim=hidden_dim,
@@ -178,9 +213,21 @@ def build_network_from_state_dict(
         kernel_sizes=kernel_sizes,
         stride_sizes=stride_sizes,
         head_hidden_sizes=head_hidden_sizes,
+        use_dueling_head=use_dueling_head,
     )
     network.load_state_dict(state_dict)
     return network.to(device)
+
+
+def build_mlp(input_dim: int, hidden_layers: Sequence[int], output_dim: int) -> nn.Sequential:
+    layers: list[nn.Module] = []
+    in_dim = input_dim
+    for layer_dim in hidden_layers:
+        layers.append(nn.Linear(in_dim, layer_dim))
+        layers.append(nn.ReLU())
+        in_dim = layer_dim
+    layers.append(nn.Linear(in_dim, output_dim))
+    return nn.Sequential(*layers)
 
 
 def epsilon_by_step(config: DQNConfig, step: int) -> float:

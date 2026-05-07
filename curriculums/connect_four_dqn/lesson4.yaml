@@ -1,8 +1,18 @@
 name: lesson4_self_play
-fraction: 0.40
-opponent: self_play
+opponent: self
+opponent_pool_size: 6
+opponent_upgrade: 6000
+eval_opponent: strong
+pretrained_path: outputs/models/dqn/lesson3_trained_agent.pt
+save_path: outputs/models/dqn/lesson4_trained_agent.pt
+max_train_episodes: 200000
 buffer_warm_up: false
-block_vertical_bias: 1.0
+warm_up_opponent:
+agent_warm_up: 0
+block_vert_coef: 1
+learning_rate_scale: 0.25
+epsilon_start: 0.20
+epsilon_end: 0.02
 rewards:
   win: 1.0
   vertical_win: 1.0

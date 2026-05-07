@@ -25,7 +25,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--n-res-blocks", type=int, help="Override number of residual blocks from config")
     parser.add_argument("--temperature", type=float, help="Override self-play temperature from config")
     parser.add_argument("--temperature-drop-move", type=int, help="Override move after which policy becomes greedy")
-    parser.add_argument("--checkpoint-dir", type=str, default="outputs/alphazero_checkpoints")
+    parser.add_argument("--checkpoint-dir", type=str, default="outputs/alphazero/alphazero_checkpoints")
     parser.add_argument("--device", type=str, help="Override device from config")
     return parser.parse_args()
 

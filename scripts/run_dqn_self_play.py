@@ -14,13 +14,13 @@ from connect4_rl.experiments.dqn_training import train_dqn_self_play
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Train the baseline DQN lesson sequence for Connect Four.")
+    parser = argparse.ArgumentParser(description="Train the main DQN self-play pipeline for Connect Four.")
     parser.add_argument("--config", type=str, default="config.yaml", help="Path to config file")
     parser.add_argument("--episodes", type=int, help="Override episodes from config")
     parser.add_argument("--eval-interval", type=int, help="Override evaluation interval from config")
     parser.add_argument("--eval-games", type=int, help="Override number of evaluation games from config")
     parser.add_argument("--checkpoint-dir", type=str, default="outputs/dqn_checkpoints")
-    parser.add_argument("--lessons-dir", type=str, default=None, help="Directory containing lesson YAML files")
+    parser.add_argument("--lessons-dir", type=str, default=None, help="Directory containing tutorial lesson YAML files")
     return parser.parse_args()
 
 
@@ -43,6 +43,7 @@ def main() -> None:
         "curriculum_name": metrics.curriculum_name,
         "mean_reward_last_20": sum(metrics.episode_rewards[-20:]) / max(len(metrics.episode_rewards[-20:]), 1),
         "phase_summary": metrics.phase_summary,
+        "lesson_summaries": metrics.lesson_summaries,
         "last_eval": metrics.evaluation[-1] if metrics.evaluation else {},
         "best_eval_score": metrics.best_score,
         "best_checkpoint_path": metrics.best_checkpoint_path,

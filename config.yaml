@@ -16,40 +16,66 @@ dqn:
   kernel_sizes: [4]
   stride_sizes: [1]
   head_hidden_sizes: [64, 64]
+  use_dueling_head: false
   
   # Learning
-  learning_rate: 0.0003
-  batch_size: 64
-  replay_buffer_size: 20000
-  min_replay_size: 128
+  learning_rate: 0.0001
+  batch_size: 256
+  replay_buffer_size: 100000
+  min_replay_size: 256
   gamma: 0.99
   
   # Exploration
   epsilon_start: 1.0
-  epsilon_end: 0.05
-  epsilon_decay_steps: 6000
+  epsilon_end: 0.1
+  epsilon_decay_rate: 0.9998
   warmup_episodes: 40
   
   # Target network
-  target_update_freq: 200     # Hard update interval (if using hard updates)
-  tau: 0.02                   # Soft update rate (if using EMA)
+  target_update_freq: 1
+  tau: 0.01
   
   # Self-play
-  opponent_pool_size: 5
+  opponent_pool_size: 6
   opponent_refresh_interval: 30
   opponent_epsilon: 0.05
-  random_opponent_fraction: 0.2
-  heuristic_opponent_fraction: 0.2
-  
+  random_opponent_fraction: 0.05
+  heuristic_opponent_fraction: 0.45
+  self_play_min_episodes_before_early_stop: 100
+  self_play_early_stop_patience_evals: 2
+
+  # Tutorial-style population training
+  population_size: 1
+  episodes_per_epoch: 10
+  evo_epochs: 1
+  evo_loop: 50
+  max_steps_per_episode: 500
+  tournament_size: 1
+
+  # Tutorial-style mutation settings
+  no_mutation_prob: 1.0
+  mutation_lr_prob: 0.0
+  mutation_batch_prob: 0.0
+  mutation_learn_step_prob: 0.0
+  mutation_grow_factor: 1.5
+  mutation_shrink_factor: 0.75
+  mutation_min_lr: 0.0001
+  mutation_max_lr: 0.01
+  mutation_min_batch_size: 8
+  mutation_max_batch_size: 64
+  mutation_min_learn_step: 1
+  mutation_max_learn_step: 120
+
   # Training limits
   episodes: 500
-  gradient_updates_per_step: 2
+  learn_step: 1
+  gradient_updates_per_step: 1
   use_horizontal_symmetry_augmentation: true
   
   # Evaluation
   eval_interval: 30
   eval_games: 12
-  checkpoint_score_heuristic_weight: 2.0
+  checkpoint_score_heuristic_weight: 6.0
 
 ppo:
   # Architecture
@@ -90,28 +116,28 @@ ppo:
   checkpoint_score_heuristic_weight: 2.0
 
 alphazero:
-  episodes: 300
-  learning_rate: 0.00025
+  episodes: 800
+  learning_rate: 0.001
   weight_decay: 0.0001
-  batch_size: 64
+  batch_size: 128
   replay_capacity: 20000
-  replay_warmup_games: 16
-  update_epochs: 4
+  replay_warmup_games: 12
+  update_epochs: 1
   updates_per_episode: 2
-  n_filters: 128
-  n_res_blocks: 8
-  mcts_simulations: 120
-  mcts_start_search_iter: 30
-  mcts_max_search_iter: 150
+  n_filters: 64
+  n_res_blocks: 4
+  mcts_simulations: 48
+  mcts_start_search_iter: 12
+  mcts_max_search_iter: 48
   mcts_search_increment: 1
-  eval_mcts_simulations: 200
-  c_puct: 1.5
-  dirichlet_alpha: 0.3
+  eval_mcts_simulations: 80
+  c_puct: 2.0
+  dirichlet_alpha: 1.0
   dirichlet_epsilon: 0.25
-  temperature: 1.0
+  temperature: 1.25
   temperature_drop_move: 8
-  eval_interval: 25
-  eval_games: 24
+  eval_interval: 40
+  eval_games: 16
   seed: 0
   device: "auto"
   checkpoint_score_heuristic_weight: 2.0
@@ -120,7 +146,7 @@ alphazero:
   max_grad_norm: 5.0
   anneal_learning_rate: true
   root_noise_each_move: true
-  tactical_eval_examples: 128
+  tactical_eval_examples: 96
 
 # MCTS Baseline Configuration
 mcts:

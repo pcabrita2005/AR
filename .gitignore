@@ -14,6 +14,17 @@ __pycache__/
 # Generated artifacts
 outputs/*
 !outputs/.gitkeep
+notebooks/alphazero/outputs/*
+!notebooks/alphazero/outputs/.gitkeep
+notebooks/dqn/outputs/*
+!notebooks/dqn/outputs/.gitkeep
+!notebooks/dqn/outputs/models/
+notebooks/dqn/outputs/models/*
+!notebooks/dqn/outputs/models/dqn/
+notebooks/dqn/outputs/models/dqn/*
+!notebooks/dqn/outputs/models/dqn/*.pt
+tmp/
+*.zip
 
 # Jupyter
 .ipynb_checkpoints/
