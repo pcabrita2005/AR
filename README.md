@@ -1,38 +1,38 @@
-# Aprendizagem por Reforco
+# Aprendizagem por Reforço
 
-Repositorio do projeto **Aprendizagem Competitiva no Jogo 4 em Linha: Implementacao de Self-Play com Aprendizagem por Reforco**.
+Repositório do projeto **Self-Play Connect Four: Implementação de Self-Play com Aprendizagem por Reforço**.
 
 ## Estado atual
 
-O repositorio ja inclui:
+O repositório já inclui:
 
-- ambiente base de `Connect Four`;
-- agentes baseline `random` e `heuristic`;
-- implementacao inicial de `MCTS`;
-- pipeline inicial de `DQN` em self-play;
-- pipeline inicial de `PPO` em self-play;
-- implementacao inicial de `AlphaZero` simplificado;
-- utilitarios de avaliacao e torneio;
-- testes minimos do ambiente e dos agentes.
+- Ambiente base de `Connect Four`;
+- Agentes baseline `random` e `heuristic`;
+- Implementação inicial de `MCTS`;
+- Pipeline inicial de `DQN` em self-play;
+- Pipeline inicial de `PPO` em self-play;
+- Implementação inicial de `AlphaZero` simplificado;
+- Utilitários de avaliação e torneio;
+- Testes mínimos do ambiente e dos agentes.
 
 ## Estrutura
 
 - `connect4_rl/`
-  - codigo principal do projeto.
+  - Código principal do projeto.
 - `connect4_rl/envs/`
-  - regras, estado e interface do ambiente.
+  - Regras, estado e interface do ambiente.
 - `connect4_rl/agents/baselines/`
-  - agentes simples para comparacao.
+  - Agentes simples para comparação.
 - `connect4_rl/agents/planning/`
-  - algoritmos de planeamento, comecando por `MCTS`.
+  - Algoritmos de planeamento, começando por `MCTS`.
 - `connect4_rl/experiments/`
-  - partidas e torneios entre agentes.
+  - Partidas e torneios entre agentes.
 - `scripts/`
-  - pontos de entrada para correr experiencias.
+  - Pontos de entrada para correr experiências.
 - `tests/`
-  - testes automaticos base.
+  - Testes automáticos base.
 - `docs/`
-  - notas de arquitetura e roadmap tecnico.
+  - Notas de arquitetura e roadmap técnico.
 
 ## Setup
 
@@ -62,16 +62,16 @@ Opcional para integrar o ambiente com Jupyter:
 ./.venv/bin/python scripts/run_dqn_self_play.py --episodes 300 --eval-interval 50 --eval-games 24
 ```
 
-O treino DQN segue agora um pipeline inspirado no tutorial de curriculum learning com quatro licoes sequenciais:
+O treino DQN segue um pipeline inspirado no tutorial de _curriculum learning_ com quatro lições sequenciais:
 
 - `lesson1_random`
 - `lesson2_weak`
 - `lesson3_strong`
 - `lesson4_self_play`
 
-Cada licao reusa os melhores pesos da anterior, aplica reward shaping e termina com self-play na ultima fase.
+Cada lição reutiliza os melhores pesos da anterior, aplica _reward shaping_ e termina com self-play na última fase.
 
-### Ablacao DQN
+### Ablação DQN
 
 ```bash
 ./.venv/bin/python scripts/run_dqn_ablation.py
@@ -83,7 +83,7 @@ Cada licao reusa os melhores pesos da anterior, aplica reward shaping e termina 
 ./.venv/bin/python scripts/run_ppo_self_play.py --episodes 300 --eval-interval 50 --eval-games 24
 ```
 
-### Ablacao PPO
+### Ablação PPO
 
 ```bash
 ./.venv/bin/python scripts/run_ppo_ablation.py
@@ -110,15 +110,15 @@ Cada licao reusa os melhores pesos da anterior, aplica reward shaping e termina 
 ./.venv/bin/python scripts/run_alphazero_self_play.py --episodes 200 --eval-interval 25 --eval-games 24 --mcts-simulations 80 --eval-mcts-simulations 120
 ```
 
-## Documentacao util
+## Documentação útil
 
-- organizacao do repositorio: [docs/REPO_STRUCTURE.md](/home/vasco44/AR/docs/REPO_STRUCTURE.md)
-- roadmap tecnico: [docs/NEXT_STEPS.md](/home/vasco44/AR/docs/NEXT_STEPS.md)
-- planeamento do trabalho: [Planeamento.typ](/home/vasco44/AR/Planeamento.typ)
+- Organização do repositório: [docs/REPO_STRUCTURE.md](/home/vasco44/AR/docs/REPO_STRUCTURE.md)
+- _Roadmap_ técnico: [docs/NEXT_STEPS.md](/home/vasco44/AR/docs/NEXT_STEPS.md)
+- Planeamento do trabalho: [Planeamento.typ](/home/vasco44/AR/Planeamento.typ)
 
 ## Notebooks
 
-A ideia do repositorio e usar os notebooks como camada simples de execucao e analise, em cima do codigo que vive em `connect4_rl/`.
+A ideia do repositório é usar os notebooks como camada simples de execução e análise, em cima do código `connect4_rl/`.
 
 - `notebooks/baselines/01_baselines.ipynb`
 - `notebooks/planning/02_mcts.ipynb`
@@ -132,7 +132,7 @@ A ideia do repositorio e usar os notebooks como camada simples de execucao e ana
 
 ### Showcase DQN sem retraining
 
-O repositorio inclui checkpoints compactos do DQN em:
+O repositório inclui checkpoints do DQN em:
 
 - `notebooks/dqn/outputs/models/dqn/lesson1_trained_agent.pt`
 - `notebooks/dqn/outputs/models/dqn/lesson2_trained_agent.pt`
@@ -143,11 +143,11 @@ Isto permite abrir diretamente o notebook:
 
 - `notebooks/dqn/04_dqn_best_model_showcase.ipynb`
 
-mesmo que a pasta `outputs/` com as runs completas nao exista localmente. O notebook tenta primeiro usar uma run completa em `outputs/`; se nao encontrar, faz fallback para o checkpoint compacto versionado.
+mesmo que a pasta `outputs/` com as runs completas não exista localmente. O notebook tenta primeiro usar um run completo em `outputs/`; se não encontrar, faz fallback para o checkpoint compacto versionado.
 
 ## Grupo
 
 - Afonso Sousa
-- Luis Cunha
+- Luís Cunha
 - Paulo Cabrita
 - Vasco Macedo

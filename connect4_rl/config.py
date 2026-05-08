@@ -441,10 +441,16 @@ class Config:
 def load_config(config_path: str) -> Config:
     config_path = Path(config_path)
 
-    if not config_path.exists():
-        raise FileNotFoundError(f"Configuration file not found: {config_path}")
+    candidate_paths = [config_path]
+    if not config_path.is_absolute():
+        candidate_paths.append(Path(__file__).resolve().parents[1] / config_path)
 
-    with open(config_path, "r") as f:
+    resolved_path = next((path for path in candidate_paths if path.exists()), None)
+    if resolved_path is None:
+        tried_paths = ", ".join(str(path) for path in candidate_paths)
+        raise FileNotFoundError(f"Configuration file not found. Tried: {tried_paths}")
+
+    with open(resolved_path, "r") as f:
         data = yaml.safe_load(f)
 
     if data is None:
