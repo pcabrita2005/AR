@@ -122,7 +122,7 @@ Isto permite abrir diretamente o notebook:
 
 - `notebooks/dqn/04_dqn_best_model_showcase.ipynb`
 
-mesmo que a pasta `outputs/` com as runs completas não exista localmente.
+mesmo que a pasta `outputs/` com as runs completas não exista localmente. O notebook tenta primeiro usar uma run completa em `outputs/`; se não encontrar, faz fallback para o checkpoint compacto versionado.
 
 ### PPO
 
