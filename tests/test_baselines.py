@@ -1,5 +1,5 @@
 import unittest
-from connect4_rl.agents.baselines import HeuristicAgent, RandomAgent, StrongHeuristicAgent, WeakHeuristicAgent
+from connect4_rl.agents.baselines import HeuristicAgent, MinimaxAgent, RandomAgent, StrongHeuristicAgent, WeakHeuristicAgent
 from connect4_rl.envs.connect_four import (
     initial_state,
     apply_action,
@@ -157,6 +157,17 @@ class TestAgentMatchup(unittest.TestCase):
                 strong_wins += 1
 
         self.assertGreaterEqual(strong_wins, games // 2)
+
+    def test_minimax_selects_legal_action(self):
+        agent = MinimaxAgent(depth=2, seed=42)
+        state = initial_state()
+        for _ in range(20):
+            legal = legal_actions(state)
+            action = agent.select_action(state, legal)
+            self.assertIn(action, legal)
+            state = apply_action(state, action)
+            if is_terminal(state):
+                break
 
 
 if __name__ == "__main__":

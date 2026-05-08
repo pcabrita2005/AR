@@ -80,40 +80,61 @@ dqn:
 ppo:
   # Architecture
   hidden_dim: 256
+  channel_sizes: [64, 128]
+  kernel_sizes: [4, 3]
+  stride_sizes: [1, 1]
+  head_hidden_sizes: [256, 128]
   
   # Learning
-  learning_rate: 0.00025
+  learning_rate: 0.00015
   batch_size: 64              # Total batch size (rollout_episodes * steps)
-  minibatch_size: 32
-  n_epochs: 4
+  minibatch_size: 64
+  n_epochs: 6
   gamma: 0.99
   gae_lambda: 0.95
-  clip_ratio: 0.2
-  entropy_coeff: 0.01
+  clip_ratio: 0.15
+  entropy_coeff: 0.015
   value_coeff: 0.5
   max_grad_norm: 0.5
+  target_kl: 0.03
   
   # Rollout collection
   rollout_length: 128
-  rollout_episodes_per_update: 8
+  rollout_episodes_per_update: 12
   use_horizontal_symmetry_augmentation: true
   anneal_learning_rate: true
   
   # Self-play
-  opponent_pool_size: 5
-  warmup_episodes: 40
-  random_opponent_fraction: 0.2
-  heuristic_opponent_fraction: 0.2
+  opponent_pool_size: 8
+  warmup_episodes: 0
+  random_opponent_fraction: 0.05
+  heuristic_opponent_fraction: 0.35
   reward_shaping: true
-  reward_shaping_scale: 10.0
+  reward_shaping_scale: 8.0
+  threat_bonus_scale: 0.35
+  opponent_threat_penalty_scale: 0.60
+  blocked_threat_bonus_scale: 0.75
+  allowed_threat_penalty_scale: 1.10
+  center_control_scale: 0.10
+  imitation_loss_coeff: 0.40
+  enable_policy_bootstrap: true
+  bootstrap_samples: 12000
+  bootstrap_batch_size: 256
+  bootstrap_epochs: 6
+  bootstrap_learning_rate: 0.0003
+  bootstrap_teacher_kind: "strong"
+  curriculum_profile: "tutorial"
+  freeze_feature_extractor_lessons: 0
+  self_play_min_episodes_before_early_stop: 60
+  self_play_early_stop_patience_evals: 2
   
   # Training limits
-  episodes: 500
+  episodes: 720
   
   # Evaluation
-  eval_interval: 50
+  eval_interval: 30
   eval_games: 24
-  checkpoint_score_heuristic_weight: 2.0
+  checkpoint_score_heuristic_weight: 5.0
 
 alphazero:
   episodes: 800
@@ -222,13 +243,16 @@ notebook_settings:
     ppo:
       - name: "base"
         params: {}
-      - name: "no_shaping"
+      - name: "robust_selection"
         params:
-          use_reward_shaping: false
-      - name: "conservative"
+          eval_games: 32
+          checkpoint_score_heuristic_weight: 6.0
+          rollout_episodes_per_update: 14
+      - name: "safer_self_play"
         params:
-          learning_rate: 1.5e-4
+          learning_rate: 1.0e-4
           entropy_coeff: 0.01
-          rollout_episodes_per_update: 12
+          random_opponent_fraction: 0.0
+          heuristic_opponent_fraction: 0.4
     
     alphazero: []  # No ablation variants for AlphaZero

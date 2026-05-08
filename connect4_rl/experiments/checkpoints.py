@@ -84,6 +84,10 @@ def build_agent_from_checkpoint(
             sample_actions=False,
             seed=int(config.get("seed", 0)),
             hidden_dim=int(config.get("hidden_dim", 128)),
+            channel_sizes=config.get("channel_sizes"),
+            kernel_sizes=config.get("kernel_sizes"),
+            stride_sizes=config.get("stride_sizes"),
+            head_hidden_sizes=config.get("head_hidden_sizes"),
         )
     if algorithm == "alphazero":
         return AlphaZeroAgent.from_checkpoint(
