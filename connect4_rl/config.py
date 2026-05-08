@@ -211,31 +211,31 @@ class PPOConfig:
     head_hidden_sizes: List[int] = field(default_factory=lambda: [256, 128])
 
     # Learning
-    learning_rate: float = 1.5e-4
+    learning_rate: float = 2.5e-4
     batch_size: int = 64  # Total batch size (rollout_episodes * steps)
-    minibatch_size: int = 64
-    n_epochs: int = 6
+    minibatch_size: int = 32
+    n_epochs: int = 4
     gamma: float = 0.99
     gae_lambda: float = 0.95
-    clip_ratio: float = 0.15
-    entropy_coeff: float = 0.015
+    clip_ratio: float = 0.2
+    entropy_coeff: float = 0.01
     value_coeff: float = 0.5
     max_grad_norm: float = 0.5
     target_kl: float = 0.03
 
     # Rollout collection
     rollout_length: int = 128
-    rollout_episodes_per_update: int = 12
+    rollout_episodes_per_update: int = 8
     use_horizontal_symmetry_augmentation: bool = True
     anneal_learning_rate: bool = True
 
     # Self-play
-    opponent_pool_size: int = 8
-    warmup_episodes: int = 0
-    random_opponent_fraction: float = 0.05
-    heuristic_opponent_fraction: float = 0.35
+    opponent_pool_size: int = 5
+    warmup_episodes: int = 40
+    random_opponent_fraction: float = 0.20
+    heuristic_opponent_fraction: float = 0.20
     reward_shaping: bool = True
-    reward_shaping_scale: float = 8.0
+    reward_shaping_scale: float = 10.0
     threat_bonus_scale: float = 0.35
     opponent_threat_penalty_scale: float = 0.60
     blocked_threat_bonus_scale: float = 0.75
@@ -243,23 +243,25 @@ class PPOConfig:
     center_control_scale: float = 0.10
     imitation_loss_coeff: float = 0.40
     enable_policy_bootstrap: bool = True
-    bootstrap_samples: int = 12000
-    bootstrap_batch_size: int = 256
-    bootstrap_epochs: int = 6
-    bootstrap_learning_rate: float = 3.0e-4
+    # Bootstrapping / curriculum options (may be absent in older configs)
+    bootstrap_samples: int = 0
+    bootstrap_batch_size: int = 64
+    bootstrap_epochs: int = 1
+    bootstrap_learning_rate: float = 1e-4
     bootstrap_teacher_kind: str = "strong"
     curriculum_profile: str = "tutorial"
     freeze_feature_extractor_lessons: int = 0
-    self_play_min_episodes_before_early_stop: int = 60
+    # Early-stopping parameters for self-play phase
+    self_play_min_episodes_before_early_stop: int = 0
     self_play_early_stop_patience_evals: int = 2
     
     # Evaluation
-    eval_interval: int = 30
+    eval_interval: int = 50
     eval_games: int = 24
-    checkpoint_score_heuristic_weight: float = 5.0
+    checkpoint_score_heuristic_weight: float = 2.0
 
     # Training limits
-    episodes: int = 720
+    episodes: int = 500
 
     def validate(self):
         if self.learning_rate < 0:
@@ -276,51 +278,6 @@ class PPOConfig:
             raise ValueError(f"clip_ratio must be in (0, 1], got {self.clip_ratio}")
         if not 0 <= self.entropy_coeff <= 1:
             raise ValueError(f"entropy_coeff must be in [0, 1], got {self.entropy_coeff}")
-        if self.target_kl <= 0:
-            raise ValueError(f"target_kl must be positive, got {self.target_kl}")
-        if any(
-            value < 0
-            for value in [
-                self.reward_shaping_scale,
-                self.threat_bonus_scale,
-                self.opponent_threat_penalty_scale,
-                self.blocked_threat_bonus_scale,
-                self.allowed_threat_penalty_scale,
-                self.center_control_scale,
-                self.imitation_loss_coeff,
-            ]
-        ):
-            raise ValueError("PPO reward shaping coefficients must be >= 0")
-        if self.bootstrap_samples < 0:
-            raise ValueError(f"bootstrap_samples must be >= 0, got {self.bootstrap_samples}")
-        if self.bootstrap_batch_size < 1:
-            raise ValueError(f"bootstrap_batch_size must be >= 1, got {self.bootstrap_batch_size}")
-        if self.bootstrap_epochs < 1:
-            raise ValueError(f"bootstrap_epochs must be >= 1, got {self.bootstrap_epochs}")
-        if self.bootstrap_learning_rate <= 0:
-            raise ValueError(f"bootstrap_learning_rate must be positive, got {self.bootstrap_learning_rate}")
-        if self.bootstrap_teacher_kind not in {"strong", "minimax_1", "mixed_strong_minimax_1"}:
-            raise ValueError(
-                "bootstrap_teacher_kind must be one of "
-                "['strong', 'minimax_1', 'mixed_strong_minimax_1'], "
-                f"got {self.bootstrap_teacher_kind}"
-            )
-        if self.curriculum_profile not in {"tutorial", "final_push", "final_push_hard_bridge"}:
-            raise ValueError(
-                f"curriculum_profile must be one of ['tutorial', 'final_push', 'final_push_hard_bridge'], got {self.curriculum_profile}"
-            )
-        if self.freeze_feature_extractor_lessons < 0:
-            raise ValueError(
-                f"freeze_feature_extractor_lessons must be >= 0, got {self.freeze_feature_extractor_lessons}"
-            )
-        if self.self_play_min_episodes_before_early_stop < 0:
-            raise ValueError(
-                f"self_play_min_episodes_before_early_stop must be >= 0, got {self.self_play_min_episodes_before_early_stop}"
-            )
-        if self.self_play_early_stop_patience_evals < 1:
-            raise ValueError(
-                f"self_play_early_stop_patience_evals must be >= 1, got {self.self_play_early_stop_patience_evals}"
-            )
         if not self.channel_sizes:
             raise ValueError("channel_sizes must not be empty")
         if not (len(self.channel_sizes) == len(self.kernel_sizes) == len(self.stride_sizes)):
@@ -331,6 +288,22 @@ class PPOConfig:
             raise ValueError("head_hidden_sizes must not be empty")
         if any(value < 1 for value in self.head_hidden_sizes):
             raise ValueError("head_hidden_sizes must all be >= 1")
+        if self.bootstrap_samples < 0:
+            raise ValueError(f"bootstrap_samples must be >= 0, got {self.bootstrap_samples}")
+        if self.bootstrap_batch_size < 1:
+            raise ValueError(f"bootstrap_batch_size must be >= 1, got {self.bootstrap_batch_size}")
+        if self.bootstrap_epochs < 0:
+            raise ValueError(f"bootstrap_epochs must be >= 0, got {self.bootstrap_epochs}")
+        if self.freeze_feature_extractor_lessons < 0:
+            raise ValueError(f"freeze_feature_extractor_lessons must be >= 0, got {self.freeze_feature_extractor_lessons}")
+        if self.self_play_min_episodes_before_early_stop < 0:
+            raise ValueError(
+                f"self_play_min_episodes_before_early_stop must be >= 0, got {self.self_play_min_episodes_before_early_stop}"
+            )
+        if self.self_play_early_stop_patience_evals < 1:
+            raise ValueError(
+                f"self_play_early_stop_patience_evals must be >= 1, got {self.self_play_early_stop_patience_evals}"
+            )
 
 
 @dataclass
