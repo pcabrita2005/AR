@@ -1,7 +1,6 @@
 global:
   seed: 42
-  device: "auto" 
-  num_workers: 1
+  device: "auto"
   verbose: true
 
 environment:
@@ -137,28 +136,50 @@ ppo:
   checkpoint_score_heuristic_weight: 5.0
 
 alphazero:
-  episodes: 800
-  learning_rate: 0.001
+  episodes: 1600
+  # old: learning_rate: 0.001
+  # A slightly smaller step size usually reduces reward oscillation and training collapse.
+  learning_rate: 0.0001
   weight_decay: 0.0001
+  # old: batch_size: 128
+  # A larger batch better uses the available GPU memory and makes updates less noisy.
   batch_size: 128
+  # old: num_workers: 1 (implicit default)
+  # Use `episodes_per_batch` to control how many self-play episodes are grouped
+  # into a single training batch (replaces previous `num_workers` semantics).
+  episodes_per_batch: 1
   replay_capacity: 20000
   replay_warmup_games: 12
   update_epochs: 1
-  updates_per_episode: 2
+  updates_per_episode: 4
   n_filters: 64
   n_res_blocks: 4
-  mcts_simulations: 48
-  mcts_start_search_iter: 12
-  mcts_max_search_iter: 48
+  # old: mcts_simulations: 48
+  # Slightly stronger search improves policy targets without a large slowdown.
+  mcts_simulations: 64
+  # old: mcts_start_search_iter: 12
+  # Use a stronger search earlier to stabilize the first training phase.
+  mcts_start_search_iter: 16
+  # old: mcts_max_search_iter: 48
+  # Keep search a bit stronger later in training, but still bounded.
+  mcts_max_search_iter: 64
   mcts_search_increment: 1
   eval_mcts_simulations: 80
   c_puct: 2.0
   dirichlet_alpha: 1.0
-  dirichlet_epsilon: 0.25
+  # old: dirichlet_epsilon: 0.25
+  # Reduce root noise so self-play targets are less volatile.
+  dirichlet_epsilon: 0.15
+  # old: temperature: 1.25
+  # Lower temperature makes early move sampling less random and tends to stabilise rewards.
   temperature: 1.25
-  temperature_drop_move: 8
+  # old: temperature_drop_move: 8
+  # Switch to greedy play slightly earlier to reduce late-game oscillation.
+  temperature_drop_move: 6
   eval_interval: 40
-  eval_games: 16
+  # old: eval_games: 16
+  # Fewer evaluation games keep the notebook responsive while parallel workers cover the variance.
+  eval_games: 12
   seed: 0
   device: "auto"
   checkpoint_score_heuristic_weight: 2.0
@@ -166,7 +187,9 @@ alphazero:
   value_loss_coef: 1.0
   max_grad_norm: 5.0
   anneal_learning_rate: true
-  root_noise_each_move: true
+  # old: root_noise_each_move: true
+  # Apply Dirichlet noise only at the root move to reduce move-to-move instability.
+  root_noise_each_move: false
   tactical_eval_examples: 96
 
 # MCTS Baseline Configuration

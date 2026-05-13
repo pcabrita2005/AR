@@ -9,7 +9,6 @@ from pathlib import Path
 class GlobalConfig:
     seed: int = 42
     device: str = "auto"  # "auto", "cpu", "cuda"
-    num_workers: int = 1
     verbose: bool = True
 
     def validate(self):
@@ -17,8 +16,6 @@ class GlobalConfig:
             raise ValueError(f"device must be 'auto', 'cpu', or 'cuda', got {self.device}")
         if self.seed < 0:
             raise ValueError(f"seed must be non-negative, got {self.seed}")
-        if self.num_workers < 1:
-            raise ValueError(f"num_workers must be >= 1, got {self.num_workers}")
 
 
 @dataclass
@@ -312,6 +309,12 @@ class AlphaZeroConfig:
     learning_rate: float = 1e-3
     weight_decay: float = 1e-4
     batch_size: int = 128
+    # `num_workers` deprecated: use `episodes_per_batch` to control how many
+    # self-play episodes are grouped into a single training batch. Kept for
+    # backward compatibility with older config files but ignored by training
+    # logic in favour of `episodes_per_batch`.
+    num_workers: int = 1
+    episodes_per_batch: int = 1
     replay_capacity: int = 20_000
     replay_warmup_games: int = 12
     update_epochs: int = 1
@@ -343,6 +346,11 @@ class AlphaZeroConfig:
     def validate(self):
         if self.learning_rate < 0:
             raise ValueError(f"learning_rate must be positive, got {self.learning_rate}")
+        # Prefer explicit episodes_per_batch; fall back to num_workers if not set.
+        if getattr(self, "episodes_per_batch", 1) < 1:
+            raise ValueError(
+                f"episodes_per_batch must be >= 1, got {getattr(self, 'episodes_per_batch', None)}"
+            )
         if self.n_filters < 32:
             raise ValueError(f"n_filters must be >= 32, got {self.n_filters}")
         if self.n_res_blocks < 1:
